@@ -16,7 +16,12 @@ from app.schemas.recommendation import RecommendationCreate
 from app.services.analysis_service import analyze_mood_from_text
 from app.services.current_user import get_spotify_access_token, sync_spotify_token_cookies
 from app.services.favorite_service import build_user_preference_context
-from app.services.gemini_service import GeminiServiceError, _recommendation_role, generate_recommendation_copy
+from app.services.gemini_service import (
+    GeminiServiceError,
+    _family_trip_reason_ingredient,
+    _recommendation_role,
+    generate_recommendation_copy,
+)
 from app.core.config import settings
 from app.services.mood_service import (
     create_mood_record,
@@ -28,6 +33,7 @@ from app.services.mood_service import (
 )
 from app.services.recommendation_knowledge_base import build_recommendation_guidance, retrieve_recommendation_context
 from app.services.spotify_service import (
+    _enforce_korean_band_rock_selection,
     _split_context,
     build_recommendation_message,
     build_track_reason,
@@ -133,6 +139,20 @@ def _overstates_listening_effect(reason: str) -> bool:
         "위로가 절실",
         "포옹을 건네",
         "차분함을 되찾",
+        "몸과 마음을 달래",
+        "마음을 달래",
+        "풀어보세요",
+        "날려보세요",
+        "날려보낼",
+        "풀어낼",
+        "털어낼",
+        "전환해 보세요",
+        "기분을 바꿔보세요",
+        "풀 수 있도록",
+        "곁에 머물",
+        "마음을 안아",
+        "감정을 보듬",
+        "위로를 건네",
     )
     return any(marker in lowered for marker in outcome_markers)
 
@@ -169,8 +189,21 @@ def _uses_unnatural_recommendation_language(reason: str) -> bool:
         "로 이루어져",
         "을 지녀",
         "가 담겨 있어",
+        "가 담긴",
+        "만들어줘",
+        "만들어 줘",
+        "대중성이 돋보",
+        "골고루 담겨",
+        "분위기 곡",
+        "에너지 곡",
+        "대중성 곡",
     )
     return any(marker in reason for marker in markers)
+
+
+def _uses_formal_recommendation_style(reason: str) -> bool:
+    """Keep recommendation reasons in the app's conversational haeyo체."""
+    return any(marker in reason for marker in ("입니다", "습니다", "합니다"))
 
 
 def _uses_repetitive_or_abstract_language(reason: str) -> bool:
@@ -197,6 +230,16 @@ def _uses_repetitive_or_abstract_language(reason: str) -> bool:
         "적당합니다",
         "집중의 끈을 단단히 붙잡",
         "활기찬 분위기를 채워",
+        "감성적으로 다가",
+        "은은하게 번",
+        "포근하게 이어",
+        "마음에 스며",
+        "깊은 결",
+        "깊이감을 더해",
+        "포근하게 펼쳐",
+        "자연스럽게 스며",
+        "감정의 온도",
+        "잠겨 머물",
         "에너지가 채워지는 느낌",
         "적당해요",
         "알맞아요",
@@ -211,6 +254,9 @@ def _uses_repetitive_or_abstract_language(reason: str) -> bool:
         "차분히 정리하며 듣기",
         "가라앉히며 듣기",
         "위로를 받을 수 있어",
+        "자극 없이",
+        "기분을 가볍게 더",
+        "기분을 더하고 싶",
     )
     repeated_descriptor_patterns = (
         r"부드.{0,24}부드",
@@ -238,7 +284,83 @@ def _first_sentence_signature(reason: str) -> str:
     return re.sub(r"\s+", " ", first_sentence).strip()
 
 
-def _is_safe_recommendation_message(message: object) -> bool:
+def _has_two_sentence_reason_structure(reason: str) -> bool:
+    """Reject copy that merges a track feature and listening role into one sentence."""
+    sentences = [sentence.strip() for sentence in re.findall(r"[^.!?]+[.!?]", reason) if sentence.strip()]
+    remainder = re.sub(r"[^.!?]+[.!?]", "", reason).strip()
+    return len(sentences) == 2 and not remainder
+
+
+def _has_malformed_reason_compound(reason: str) -> bool:
+    """Catch feature/context noun chains that are hard to read even with two sentences."""
+    markers = (
+        "에너지가 느껴지는 여러 사람",
+        "에너지를 지닌 여름 여행",
+        "에너지를 전하는 가족 여행",
+        "여름 여행 기분 좋은 곡",
+        "곡이며 가족과",
+    )
+    return any(marker in reason for marker in markers)
+
+
+def _repeats_family_trip_reason_logic(reason: str, input_text: str) -> bool:
+    """Keep the feature sentence from restating the travel role sentence."""
+    if not ("가족" in input_text and ("여행" in input_text or "차" in input_text)):
+        return False
+    sentences = [sentence.strip() for sentence in re.findall(r"[^.!?]+", reason) if sentence.strip()]
+    if len(sentences) != 2:
+        return False
+    first, second = sentences
+    return any(token in first and token in second for token in ("여름", "설렘", "차 안", "이동"))
+
+
+def _leaks_dawn_sentimental_context(reason: str, input_text: str) -> bool:
+    """Reject stale study/work fallback copy for a late-night aesthetic request."""
+    text = input_text.lower()
+    is_dawn_sentimental = any(token in input_text or token in text for token in ("새벽", "센치")) and any(
+        token in input_text or token in text for token in ("몽환", "감성", "센치", "플레이리스트")
+    )
+    if not is_dawn_sentimental:
+        return False
+    return any(
+        marker in reason
+        for marker in (
+            "해야 할 일",
+            "공부",
+            "업무",
+            "작업",
+            "집중",
+            "페이스",
+            "한 가지 일",
+            "쉬어가며 듣기",
+            "긴장을",
+            "회복",
+            "위로",
+        )
+    )
+
+
+def _uses_unselected_family_energy_feature(
+    reason: str,
+    track: TrackSummary,
+    index: int,
+    input_text: str,
+    mood: str,
+) -> bool:
+    """Do not accept an energy-led Gemini reason when code chose another feature."""
+    role = _recommendation_role(mood, index, input_text, reason_facts=track.reason_facts)
+    ingredient = _family_trip_reason_ingredient(track.reason_facts, role)
+    if not ingredient or ingredient.get("feature_source") == "upbeat_moment":
+        return False
+    first_sentence = _first_sentence_signature(reason)
+    return any(marker in first_sentence for marker in ("에너지", "경쾌", "활기찬"))
+
+
+def _is_safe_recommendation_message(
+    message: object,
+    input_text: str = "",
+    selected_vibes: list[str] | None = None,
+) -> bool:
     if not isinstance(message, str) or not message.strip():
         return False
     disallowed_markers = (
@@ -251,12 +373,40 @@ def _is_safe_recommendation_message(message: object) -> bool:
         "쉬어가세요",
         "호흡을 고르세요",
         "들어보세요",
+        "채워보세요",
+        "즐겨보세요",
+        "만끽해 보세요",
+        "느껴보세요",
+        "머물러 보세요",
         "몰입을 도와",
         "집중을 도와",
+        "몸과 마음을 달래",
+        "마음을 달래",
+        "날려보낼",
+        "풀어낼",
+        "털어낼",
     )
-    return not any(marker in message for marker in disallowed_markers) and not (
-        "초조" in message and "조급" in message
-    )
+    if any(marker in message for marker in disallowed_markers) or ("초조" in message and "조급" in message):
+        return False
+    if "잠겨" in message and "머물" in message:
+        return False
+    is_family_trip = "가족" in input_text and ("여행" in input_text or "차" in input_text)
+    if is_family_trip and any(marker in message for marker in ("더해줄", "채웠습니다", "만끽해", "즐겨보세요")):
+        return False
+
+    # Explicitly selected moods must remain visible in dawn/sentimental summaries;
+    # MBTI-derived aesthetic terms must not replace them.
+    is_dawn_sentimental = any(token in input_text.lower() for token in ("새벽", "센치"))
+    if is_dawn_sentimental and selected_vibes:
+        vibe_terms = {
+            "몽환적인": ("몽환",),
+            "감성적인": ("감성", "서정"),
+        }
+        for vibe in selected_vibes:
+            terms = vibe_terms.get(vibe)
+            if terms and not any(term in message for term in terms):
+                return False
+    return True
 
 
 def _apply_recommendation_copy(
@@ -268,7 +418,7 @@ def _apply_recommendation_copy(
     copy_reasons = recommendation_copy.get("track_reasons") if recommendation_copy else []
     reason_map: dict[str, str] = {}
     used_first_sentences: set[str] = set()
-    for track in tracks:
+    for index, track in enumerate(tracks):
         for item in copy_reasons:
             if not isinstance(item, dict) or str(item.get("track_id")) != track.track_id:
                 continue
@@ -284,8 +434,14 @@ def _apply_recommendation_copy(
                 or _has_unnatural_korean_fragment(reason)
                 or _uses_disallowed_infinitive_pattern(reason)
                 or _uses_unnatural_recommendation_language(reason)
+                or _uses_formal_recommendation_style(reason)
                 or _uses_repetitive_or_abstract_language(reason)
                 or _repeats_time_clause(reason)
+                or not _has_two_sentence_reason_structure(reason)
+                or _has_malformed_reason_compound(reason)
+                or _repeats_family_trip_reason_logic(reason, input_text)
+                or _leaks_dawn_sentimental_context(reason, input_text)
+                or _uses_unselected_family_energy_feature(reason, track, index, input_text, mood)
                 or _mentions_unsupported_music_detail(reason, track)
                 or not _has_verified_grounding(item, track)
             ):
@@ -298,7 +454,13 @@ def _apply_recommendation_copy(
             update={
                 "reason": reason_map.get(
                     track.track_id,
-                    build_track_reason(track, mood, input_text, index, _recommendation_role(mood, index, input_text)),
+                    build_track_reason(
+                        track,
+                        mood,
+                        input_text,
+                        index,
+                        _recommendation_role(mood, index, input_text, reason_facts=track.reason_facts),
+                    ),
                 )
             }
         )
@@ -435,6 +597,7 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
     # Repeat the validation at the workflow boundary so later changes cannot
     # accidentally return an unverified track for an explicit hard request.
     tracks = validate_hard_constraints(tracks, state["payload"].text)
+    tracks = _enforce_korean_band_rock_selection(tracks, state["payload"].text, 6)
     return {
         "access_token": access_token,
         "tracks": tracks,
@@ -467,7 +630,10 @@ def _compose_copy_and_track_reasons(state: RecommendationWorkflowState) -> dict[
 
     message = (
         recommendation_copy.get("message")
-        if recommendation_copy and _is_safe_recommendation_message(recommendation_copy.get("message"))
+        if recommendation_copy
+        and _is_safe_recommendation_message(
+            recommendation_copy.get("message"), input_text, selected_vibes
+        )
         else build_recommendation_message(mood, input_text, len(tracks), tracks)
     )
     enriched_tracks, reason_map = _apply_recommendation_copy(tracks, recommendation_copy, mood, input_text)
@@ -558,7 +724,11 @@ def complete_recommendation_copy(recommendation_id: int) -> None:
             copy_error = "Gemini returned no usable recommendation copy"
 
         enriched_tracks, reason_map = _apply_recommendation_copy(tracks, recommendation_copy, recommendation.mood, input_text)
-        if recommendation_copy and _is_safe_recommendation_message(recommendation_copy.get("message")):
+        if recommendation_copy and _is_safe_recommendation_message(
+            recommendation_copy.get("message"),
+            input_text,
+            selected_vibes or recommendation.selected_vibes or [],
+        ):
             recommendation.message = str(recommendation_copy["message"])
         recommendation.tracks = [track.model_dump(mode="json", exclude_none=True) for track in enriched_tracks]
         profile = dict(recommendation.generation_profile or {})

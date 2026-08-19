@@ -3,16 +3,23 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import re
 import time
+from datetime import datetime
 from functools import lru_cache
 from typing import Any
+from zoneinfo import ZoneInfo
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.core.config import settings
 from app.schemas.track import TrackSummary
+from app.services.mbti_aesthetics import detect_mbti_aesthetic
+
+
+logger = logging.getLogger(__name__)
 
 
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
@@ -180,6 +187,52 @@ TRACK_METADATA_ALIASES: dict[tuple[str, str], tuple[str, str]] = {
     ("sleepless in seoul", "ph-1"): ("sleepless in ______", "ph-1"),
 }
 
+# Spotify may return romanized artist names for Korean catalog entries.
+_SPOTIFY_ARTIST_ALIASES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("여행을 떠나요", "조용필"): ("Cho Yong Pil",),
+    ("해변의 여인", "COOL"): ("Cool",),
+    ("아모르 파티", "김연자"): ("Kim Yon Ja", "Kim Yeon Ja"),
+    ("붉은 노을", "이문세"): ("Lee Moon Sae",),
+    ("강남스타일", "싸이"): ("PSY",),
+    ("챔피언", "싸이"): ("PSY",),
+    ("롤린 (Rollin')", "브레이브걸스"): ("Brave Girls",),
+    ("바래", "FTISLAND"): ("FT Island", "FTIsland"),
+    ("거울", "국카스텐"): ("Guckkasten",),
+    ("낭만고양이", "체리필터"): ("Cherry Filter",),
+    ("일탈", "자우림"): ("Jaurim",),
+    ("겁쟁이", "버즈"): ("Buzz",),
+    ("나는 나비", "YB"): ("YB",),
+    ("박하사탕", "YB"): ("YB",),
+    ("하하하쏭", "자우림"): ("Jaurim",),
+    ("오리 날다", "체리필터"): ("Cherry Filter",),
+    ("말달리자", "크라잉넛"): ("Crying Nut",),
+}
+
+# Spotify can return romanized or translated Korean titles even when the
+# catalog entry was requested with its Korean display title.
+_SPOTIFY_TRACK_ALIASES: dict[tuple[str, str], tuple[str, ...]] = {
+    ("강남스타일", "싸이"): ("Gangnam Style",),
+    ("아모르 파티", "김연자"): ("아모르파티", "Amor Fati"),
+    ("붉은 노을", "이문세"): ("Sunset Glow",),
+    ("붉은 노을", "BIGBANG"): ("Sunset Glow",),
+    ("바래", "FTISLAND"): ("Barae",),
+    ("거울", "국카스텐"): ("Mirror",),
+    ("낭만고양이", "체리필터"): ("Romantic Cat",),
+    ("일탈", "자우림"): ("Illusion",),
+    ("겁쟁이", "버즈"): ("Coward",),
+    ("나는 나비", "YB"): ("Butterfly",),
+    ("박하사탕", "YB"): ("Peppermint Candy",),
+    ("하하하쏭", "자우림"): ("Hahaha Song",),
+    ("오리 날다", "체리필터"): ("Flying Duck",),
+    ("말달리자", "크라잉넛"): ("March",),
+}
+
+
+def _spotify_search_title(name: str, artist_name: str) -> str:
+    """Use aliases only for enrichment; the curated title remains the UI title."""
+    aliases = _SPOTIFY_TRACK_ALIASES.get((name, artist_name), ())
+    return str(aliases[0]) if aliases else name
+
 
 def _catalog_metadata_for_track(name: str, artist_name: str) -> dict[str, object]:
     normalized_name = _canonical_track_token(name)
@@ -196,6 +249,8 @@ def _catalog_metadata_for_track(name: str, artist_name: str) -> dict[str, object
             return {
                 "tags": list(candidate.get("tags") or []),
                 "moods": list(candidate.get("moods") or []),
+                "cross_generation_fit": int(candidate.get("cross_generation_fit") or 0),
+                "release_year": int(candidate.get("release_year") or 0),
             }
     return {}
 
@@ -209,6 +264,35 @@ def extract_hard_constraints(context_text: str | None) -> dict[str, bool]:
 def _is_sleep_request(context_text: str | None) -> bool:
     lowered = (context_text or "").lower()
     return any(term in lowered for term in SLEEP_REQUEST_TERMS)
+
+
+def _is_dawn_sentimental_request(context_text: str | None) -> bool:
+    """Recognize a late-night listening aesthetic without treating it as sleep."""
+    text = context_text or ""
+    lowered = text.lower()
+    has_time_or_mood_cue = any(token in text or token in lowered for token in ("새벽", "늦은 밤", "밤공기", "센치"))
+    has_aesthetic_cue = any(token in text or token in lowered for token in ("몽환", "감성", "센치", "플레이리스트"))
+    return has_time_or_mood_cue and has_aesthetic_cue and not _is_sleep_request(context_text)
+
+
+def _sleep_ranking_factors(tags: list[object], moods: list[object]) -> list[str]:
+    """Expose the verified catalog facts that made a track suitable for rest."""
+    tag_set = {str(tag).lower() for tag in tags if tag}
+    mood_set = {str(mood).lower() for mood in moods if mood}
+    factors: list[str] = []
+    if "ambient" in tag_set:
+        factors.append("앰비언트")
+    if {"classical", "piano"}.issubset(tag_set):
+        factors.append("클래식 피아노 연주")
+    elif "piano" in tag_set:
+        factors.append("피아노 연주")
+    if "calm" in mood_set or "calm" in tag_set:
+        factors.append("차분한 분위기")
+    if "dreamy" in tag_set:
+        factors.append("몽환적인 분위기")
+    if {"jazz", "standard"}.issubset(tag_set) and "calm" in mood_set:
+        factors.append("차분한 재즈 연주")
+    return factors
 
 
 def is_verified_instrumental(track: TrackSummary) -> bool:
@@ -230,6 +314,13 @@ def validate_hard_constraints(
 
 def _build_reason_facts(name: str, artist_name: str, seed_genres: list[str] | None = None) -> dict[str, object]:
     facts = _catalog_metadata_for_track(name, artist_name)
+    if facts.get("tags") or facts.get("moods"):
+        facts["feature_provenance"] = {
+            "tags": "curated_catalog_metadata",
+            "moods": "curated_catalog_metadata",
+            "origin_kr": "curated_artist_identity_metadata",
+            "artist_band": "curated_artist_identity_metadata",
+        }
     sound_hint = TRACK_SOUND_HINTS.get((name.strip().lower(), artist_name.strip().lower()))
     if sound_hint:
         facts["sound_profile"] = sound_hint[0]
@@ -237,6 +328,38 @@ def _build_reason_facts(name: str, artist_name: str, seed_genres: list[str] | No
     if seed_genres:
         facts["selection_seed_genres"] = list(seed_genres)
     return facts
+
+
+def _build_contextual_reason_facts(name: str, artist_name: str, context_text: str | None) -> dict[str, object]:
+    facts = _build_reason_facts(name, artist_name)
+    if _is_sleep_request(context_text):
+        factors = _sleep_ranking_factors(
+            list(facts.get("tags") or []),
+            list(facts.get("moods") or []),
+        )
+        if factors:
+            facts["sleep_ranking_factors"] = factors
+    return facts
+
+
+def _is_korean_band_rock_track(track: TrackSummary) -> bool:
+    tags = track.reason_facts.get("tags", []) if isinstance(track.reason_facts, dict) else []
+    return {"origin_kr", "artist_band", "rock"}.issubset({str(tag).lower() for tag in tags if tag})
+
+
+def _enforce_korean_band_rock_selection(
+    tracks: list[TrackSummary], context_text: str | None, limit: int
+) -> list[TrackSummary]:
+    """Keep foreign tracks out when a strong Korean-band-rock pool is available."""
+    if _korean_band_rock_preference_strength(context_text) not in {"hard", "strong"}:
+        return tracks[:limit]
+    exact = [track for track in tracks if _is_korean_band_rock_track(track)]
+    if len(exact) >= limit:
+        return exact[:limit]
+    # Preserve the preference as far as the verified response allows. A
+    # non-exact fallback is only retained when the exact pool is genuinely short.
+    remainder = [track for track in tracks if track not in exact]
+    return (exact + remainder)[:limit]
 
 
 MOOD_PROFILES: dict[str, dict[str, object]] = {
@@ -300,9 +423,9 @@ MOOD_ALIASES = {
 }
 
 FALLBACK_LIBRARY: list[dict[str, object]] = [
-    {"name": "Blinding Lights", "artist_name": "The Weeknd", "moods": ["anxious", "excited", "focused", "happy"], "tags": ["driving", "high_energy"]},
-    {"name": "Don't Start Now", "artist_name": "Dua Lipa", "moods": ["anxious", "excited", "happy"], "tags": ["upbeat", "high_energy"]},
-    {"name": "Levitating", "artist_name": "Dua Lipa", "moods": ["excited", "happy"], "tags": ["upbeat", "dance"]},
+    {"name": "Blinding Lights", "artist_name": "The Weeknd", "moods": ["anxious", "excited", "focused", "happy"], "tags": ["driving", "high_energy", "global_only"], "generation": "recent", "release_year": 2019, "cross_generation_fit": 1},
+    {"name": "Don't Start Now", "artist_name": "Dua Lipa", "moods": ["anxious", "excited", "happy"], "tags": ["upbeat", "high_energy", "global_only"], "generation": "recent"},
+    {"name": "Levitating", "artist_name": "Dua Lipa", "moods": ["excited", "happy"], "tags": ["upbeat", "dance", "global_only"], "generation": "recent", "release_year": 2020, "cross_generation_fit": 1},
     {"name": "HUMBLE.", "artist_name": "Kendrick Lamar", "moods": ["anxious", "angry", "focused"], "tags": ["driving", "rhythmic"]},
     {"name": "Lose Yourself", "artist_name": "Eminem", "moods": ["anxious", "focused", "angry"], "tags": ["driving", "focused"]},
     {"name": "Bad Habit", "artist_name": "Steve Lacy", "moods": ["lonely", "sad", "focused"], "tags": ["rnb", "groove"]},
@@ -336,7 +459,7 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "Hype Boy", "artist_name": "NewJeans", "moods": ["excited", "happy", "focused"], "tags": ["korean", "upbeat"]},
     {"name": "Super Shy", "artist_name": "NewJeans", "moods": ["excited", "anxious", "focused"], "tags": ["korean", "high_energy"]},
     {"name": "Love Dive", "artist_name": "IVE", "moods": ["happy", "excited"], "tags": ["korean", "upbeat"]},
-    {"name": "Dynamite", "artist_name": "BTS", "moods": ["happy", "excited", "anxious"], "tags": ["korean", "high_energy"]},
+    {"name": "Dynamite", "artist_name": "BTS", "moods": ["happy", "excited", "anxious"], "tags": ["korean", "high_energy", "mainstream", "family_trip", "summer"], "generation": "recent", "release_year": 2020, "cross_generation_fit": 4},
     {"name": "Seven", "artist_name": "Jung Kook", "moods": ["excited", "anxious"], "tags": ["korean", "driving"]},
     {"name": "Attention", "artist_name": "NewJeans", "moods": ["focused", "excited"], "tags": ["korean", "driving"]},
     {"name": "instagram", "artist_name": "DEAN", "moods": ["sad", "lonely", "calm"], "tags": ["korean", "rnb", "soul", "soft"], "reason": "낮아진 감정을 부드럽게 받아주면서도, 한국 감성 R&B 특유의 공기가 잘 살아 있는 곡이에요."},
@@ -372,9 +495,42 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "One More Time", "artist_name": "Daft Punk", "moods": ["happy", "excited"], "tags": ["house", "dance", "electronic"], "reason": "하우스/댄스 결을 직관적으로 느끼기 좋은 곡이에요."},
     {"name": "When The Sun Hits", "artist_name": "Slowdive", "moods": ["sad", "dreamy", "calm"], "tags": ["shoegaze", "dream-pop", "dreamy"], "reason": "슈게이즈 특유의 물결 같은 질감이 몽환적인 분위기를 잘 만들어줘요."},
     {"name": "Rhubarb", "artist_name": "Aphex Twin", "moods": ["calm", "lonely"], "tags": ["ambient", "electronic", "instrumental"], "reason": "차분한 전자음의 결이 앰비언트 요청에 잘 맞아요."},
+    {"name": "Comptine d'un autre été: L'après-midi", "artist_name": "Yann Tiersen", "moods": ["calm", "lonely"], "tags": ["classical", "piano", "instrumental", "soft", "emotional"]},
+    {"name": "Nuvole Bianche", "artist_name": "Ludovico Einaudi", "moods": ["calm", "sad"], "tags": ["classical", "piano", "instrumental", "soft", "emotional"]},
+    {"name": "Una Mattina", "artist_name": "Ludovico Einaudi", "moods": ["calm", "lonely"], "tags": ["classical", "piano", "instrumental", "soft"]},
+    {"name": "Kiss The Rain", "artist_name": "Yiruma", "moods": ["calm", "sad"], "tags": ["classical", "piano", "instrumental", "soft", "emotional"]},
+    {"name": "River Flows In You", "artist_name": "Yiruma", "moods": ["calm", "sad"], "tags": ["classical", "piano", "instrumental", "soft", "emotional"]},
+    {"name": "1/1", "artist_name": "Brian Eno", "moods": ["calm", "lonely"], "tags": ["ambient", "instrumental", "dreamy"]},
+    {"name": "Avril 14th", "artist_name": "Aphex Twin", "moods": ["calm", "lonely"], "tags": ["piano", "instrumental", "dreamy", "soft"]},
+    {"name": "Near Light", "artist_name": "Ólafur Arnalds", "moods": ["calm", "sad"], "tags": ["classical", "ambient", "instrumental", "emotional"]},
     {"name": "I Like Me Better", "artist_name": "Lauv", "moods": ["happy", "lonely"], "tags": ["soft", "upbeat"]},
-    {"name": "Permission to Dance", "artist_name": "BTS", "moods": ["happy", "excited"], "tags": ["korean", "upbeat"]},
-    {"name": "The Nights", "artist_name": "Avicii", "moods": ["happy", "excited", "anxious"], "tags": ["high_energy", "upbeat"]},
+    {"name": "Permission to Dance", "artist_name": "BTS", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "family_trip", "summer"], "generation": "recent", "release_year": 2021, "cross_generation_fit": 3},
+    {"name": "The Nights", "artist_name": "Avicii", "moods": ["happy", "excited", "anxious"], "tags": ["high_energy", "upbeat", "mainstream", "family_trip", "summer"], "generation": "bridge", "release_year": 2014, "cross_generation_fit": 2},
+    # Editorially curated for Korean family-trip familiarity. This is kept
+    # separate from Spotify popularity, which is global and time-sensitive.
+    {"name": "여행을 떠나요", "artist_name": "조용필", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "broad_familiarity_ko", "family_trip", "summer"], "generation": "legacy", "release_year": 1985, "cross_generation_fit": 2},
+    {"name": "해변의 여인", "artist_name": "COOL", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "broad_familiarity_ko", "family_trip", "summer"], "generation": "legacy", "release_year": 1997, "cross_generation_fit": 2},
+    {"name": "아모르 파티", "artist_name": "김연자", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "broad_familiarity_ko", "family_trip"], "generation": "bridge", "release_year": 2013, "cross_generation_fit": 3},
+    {"name": "붉은 노을", "artist_name": "이문세", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "broad_familiarity_ko", "family_trip"], "generation": "legacy", "release_year": 1988, "cross_generation_fit": 2},
+    {"name": "강남스타일", "artist_name": "싸이", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "broad_familiarity_ko", "family_trip", "summer"], "generation": "bridge", "release_year": 2012, "cross_generation_fit": 5},
+    {"name": "챔피언", "artist_name": "싸이", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "broad_familiarity_ko", "family_trip"], "generation": "bridge", "release_year": 2002, "cross_generation_fit": 3},
+    {"name": "빨간 맛", "artist_name": "Red Velvet", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "family_trip", "summer"], "generation": "bridge", "release_year": 2017, "cross_generation_fit": 3},
+    {"name": "롤린 (Rollin')", "artist_name": "브레이브걸스", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "youth_skewed"], "generation": "recent", "release_year": 2017, "cross_generation_fit": 1},
+    {"name": "아주 NICE", "artist_name": "SEVENTEEN", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "youth_skewed"], "generation": "recent", "release_year": 2016, "cross_generation_fit": 1},
+    {"name": "붉은 노을", "artist_name": "BIGBANG", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "broad_familiarity_ko", "family_trip"], "generation": "bridge", "release_year": 2008, "cross_generation_fit": 4},
+    {"name": "좋은 날", "artist_name": "아이유", "moods": ["happy", "excited"], "tags": ["korean", "upbeat", "mainstream", "broad_familiarity_ko", "family_trip"], "generation": "bridge", "release_year": 2010, "cross_generation_fit": 3},
+    {"name": "나는 나비", "artist_name": "YB", "moods": ["happy", "excited", "angry"], "tags": ["korean", "origin_kr", "artist_band", "rock", "upbeat", "high_energy", "mainstream", "broad_familiarity_ko", "family_trip"], "generation": "bridge", "release_year": 2006, "cross_generation_fit": 4},
+    {"name": "일탈", "artist_name": "자우림", "moods": ["angry", "excited", "happy"], "tags": ["korean", "origin_kr", "artist_band", "rock", "alternative", "upbeat", "high_energy"], "release_year": 1997},
+    {"name": "낭만고양이", "artist_name": "체리필터", "moods": ["angry", "excited", "happy"], "tags": ["korean", "origin_kr", "artist_band", "rock", "punk", "upbeat", "high_energy"], "release_year": 2002},
+    {"name": "거울", "artist_name": "국카스텐", "moods": ["angry", "excited", "focused"], "tags": ["korean", "origin_kr", "artist_band", "rock", "alternative", "high_energy"], "release_year": 2008},
+    {"name": "바래", "artist_name": "FTISLAND", "moods": ["angry", "excited", "sad"], "tags": ["korean", "origin_kr", "artist_band", "rock", "pop-rock", "upbeat"], "release_year": 2009},
+    {"name": "겁쟁이", "artist_name": "버즈", "moods": ["angry", "excited", "sad"], "tags": ["korean", "origin_kr", "artist_band", "rock", "pop-rock", "mainstream"], "release_year": 2005},
+    {"name": "박하사탕", "artist_name": "YB", "moods": ["angry", "excited", "focused"], "tags": ["korean", "origin_kr", "artist_band", "rock", "alternative", "high_energy", "upbeat"], "release_year": 2001},
+    {"name": "하하하쏭", "artist_name": "자우림", "moods": ["angry", "excited", "happy"], "tags": ["korean", "origin_kr", "artist_band", "rock", "alternative", "upbeat", "high_energy"], "release_year": 2004},
+    {"name": "오리 날다", "artist_name": "체리필터", "moods": ["angry", "excited", "happy"], "tags": ["korean", "origin_kr", "artist_band", "rock", "punk", "upbeat", "high_energy"], "release_year": 2003},
+    {"name": "말달리자", "artist_name": "크라잉넛", "moods": ["angry", "excited", "happy"], "tags": ["korean", "origin_kr", "artist_band", "rock", "punk", "upbeat", "high_energy"], "release_year": 1998},
+    {"name": "Happy", "artist_name": "Pharrell Williams", "moods": ["happy", "excited"], "tags": ["upbeat", "mainstream", "family_trip", "summer"], "generation": "bridge", "release_year": 2013, "cross_generation_fit": 2},
+    {"name": "Uptown Funk", "artist_name": "Mark Ronson feat. Bruno Mars", "moods": ["happy", "excited"], "tags": ["upbeat", "mainstream", "family_trip"], "generation": "bridge", "release_year": 2014, "cross_generation_fit": 2},
     {"name": "Feel It Still", "artist_name": "Portugal. The Man", "moods": ["excited", "focused"], "tags": ["upbeat", "driving"]},
 ]
 
@@ -427,7 +583,14 @@ def _get_app_access_token() -> str | None:
     try:
         with urlopen(request, timeout=4) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+    except HTTPError as exc:
+        logger.warning("Spotify app token request failed with HTTP %s", exc.code)
+        return None
+    except URLError as exc:
+        logger.warning("Spotify app token request failed: %s", exc.reason)
+        return None
+    except (TimeoutError, json.JSONDecodeError) as exc:
+        logger.warning("Spotify app token request failed: %s", type(exc).__name__)
         return None
 
     access_token = payload.get("access_token") if isinstance(payload, dict) else None
@@ -494,6 +657,18 @@ def _extract_context_tags(context_text: str | None) -> list[str]:
         if keyword in haystack:
             tags.extend(mapped_tags)
     return list(dict.fromkeys(tags))
+
+
+def _is_family_trip_request(context_text: str | None) -> bool:
+    text = context_text or ""
+    return any(token in text for token in ("가족 여행", "가족여행", "가족")) and any(
+        token in text for token in ("여행", "차", "자동차", "드라이브", "이동")
+    )
+
+
+def _current_season() -> str:
+    month = datetime.now(ZoneInfo("Asia/Seoul")).month
+    return "summer" if month in (6, 7, 8) else "spring" if month in (3, 4, 5) else "autumn" if month in (9, 10, 11) else "winter"
 
 
 def _extract_genre_family_matches(context_text: str | None) -> tuple[list[str], list[str], dict[str, object]]:
@@ -599,12 +774,17 @@ def _map_track(track: dict, mood_label: str, seed_genres: list[str]) -> TrackSum
         track_id=str(track.get("id") or track.get("uri") or track.get("name")),
         name=str(track.get("name") or "Unknown Track"),
         artist_name=str(primary_artist),
+        display_title=str(track.get("name") or "Unknown Track"),
+        spotify_track_name=str(track.get("name") or "Unknown Track"),
         album_name=album.get("name"),
         album_image_url=album_image_url,
         spotify_url=spotify_url,
         preview_url=track.get("preview_url"),
         duration_ms=duration_ms if isinstance(duration_ms, int) else None,
-        reason_facts=_build_reason_facts(str(track.get("name") or "Unknown Track"), str(primary_artist), seed_genres),
+        reason_facts={
+            **_build_reason_facts(str(track.get("name") or "Unknown Track"), str(primary_artist), seed_genres),
+            **({"popularity": track["popularity"]} if isinstance(track.get("popularity"), int) else {}),
+        },
         reason=reason,
     )
 
@@ -766,6 +946,27 @@ def _context_prefers_punk_rock(context_text: str | None) -> bool:
     return any(token in context_text or token in lowered for token in ("펑크락", "punk rock", "punk", "펑크"))
 
 
+def _korean_band_rock_preference_strength(context_text: str | None) -> str | None:
+    """Parse origin, artist type, genre, and strength instead of one vague tag."""
+    if not context_text:
+        return None
+    lowered = context_text.lower()
+    korean = any(token in context_text or token in lowered for token in ("우리나라", "국내", "한국", "korean"))
+    band = any(token in context_text or token in lowered for token in ("밴드", "band", "그룹"))
+    rock = any(token in context_text or token in lowered for token in ("락", "록", "rock"))
+    if not (korean and band and rock):
+        return None
+    if any(token in context_text or token in lowered for token in ("만 추천", "전부", "only", "only korean")):
+        return "hard"
+    if any(token in context_text or token in lowered for token in ("위주", "중심", "mostly")):
+        return "strong"
+    return "moderate"
+
+
+def _prefers_korean_band_rock(context_text: str | None) -> bool:
+    return _korean_band_rock_preference_strength(context_text) is not None
+
+
 def _context_requests_comfort(context_text: str | None) -> bool:
     if not context_text or not isinstance(context_text, str):
         return False
@@ -783,10 +984,14 @@ def _build_contextual_search_terms(context_text: str | None) -> list[str]:
     explicit_genres, genre_labels, _ = _extract_genre_family_matches(context_text)
     terms: list[str] = []
 
+    if _is_family_trip_request(context_text):
+        terms.extend(["여행을 떠나요 조용필", "해변의 여인 COOL", "아모르파티 김연자", "summer drive pop"])
     if _context_prefers_korean_rnb(context_text):
         terms.extend(["DEAN", "Colde", "Crush", "Zion.T", "Hoody", "SAAY", "Heize", "BIBI"])
     if _context_prefers_punk_rock(context_text):
         terms.extend(["Green Day", "Paramore", "Blink-182", "Fall Out Boy", "Sum 41", "The Offspring", "Panic! At The Disco"])
+    if _prefers_korean_band_rock(context_text):
+        terms.extend(["YB 나는 나비", "자우림 일탈", "체리필터 낭만고양이", "국카스텐 거울", "FTISLAND 바래", "버즈 겁쟁이"])
     if "제이팝" in genre_labels or any(token in lowered for token in ("j-pop", "jpop", "japanese pop", "일본 팝")):
         terms.extend(["YOASOBI", "Aimer", "LiSA", "Kenshi Yonezu", "Official HIGE DANDism", "Vaundy", "Eve"])
     if "애니 OST" in genre_labels or any(token in lowered for token in ("anime ost", "anime soundtrack", "anisong", "anison", "애니", "오스트")):
@@ -855,6 +1060,7 @@ def build_recommendation_message(
     context = _build_context_summary(context_text)
     korean_rnb_request = _context_prefers_korean_rnb(context_text)
     punk_request = _context_prefers_punk_rock(context_text)
+    korean_band_rock_strength = _korean_band_rock_preference_strength(context_text)
     comfort_request = _context_requests_comfort(context_text)
     job_search_request = any(
         token in (context_text or "").lower()
@@ -863,6 +1069,8 @@ def build_recommendation_message(
     study_flow_request = any(token in (context_text or "").lower() for token in ("공부", "과제", "작업", "집중", "몰입"))
     avoids_overstimulation = any(token in (context_text or "").lower() for token in ("소란", "시끄", "방해", "과하지", "너무 강", "자극"))
     sleep_request = _is_sleep_request(context_text)
+    dawn_sentimental_request = _is_dawn_sentimental_request(context_text)
+    mbti_aesthetic = detect_mbti_aesthetic(context_text)
     constraints = extract_hard_constraints(context_text)
     verified_instrumental_only = bool(tracks) and all(is_verified_instrumental(track) for track in tracks)
     free_excerpt = _excerpt(str(context["free_text"]) if context["free_text"] else "", 46)
@@ -877,10 +1085,31 @@ def build_recommendation_message(
     if study_flow_request and avoids_overstimulation:
         return "지금의 좋은 집중 흐름은 유지하면서도 너무 과하지 않게 활기를 더할 수 있는 곡들을 골라봤어요."
 
+    if _is_family_trip_request(context_text):
+        season_text = "여름" if _current_season() == "summer" else "지금 계절"
+        departure = "내일 가족과 함께 떠나는" if "내일" in (context_text or "") else "가족과 함께 떠나는"
+        return (
+            f"{departure} 여행길에 듣기 좋은 "
+            "신나는 곡들을 골라봤어요. "
+            f"{season_text} 여행의 설렘을 이어가며 차 안에서 다 같이 즐기기 좋은 음악들이에요."
+        )
+
+    if _is_dawn_sentimental_request(context_text):
+        return (
+            "새벽의 센치한 분위기에 천천히 잠겨 듣기 좋은 몽환적이고 감성적인 곡들을 골라봤어요. "
+            "혼자 생각이 길어지는 순간에 조용히 이어 듣기 좋은 음악들이에요."
+        )
+
+    if _korean_band_rock_preference_strength(context_text):
+        return (
+            "오늘 쌓인 답답한 기분을 강한 음악으로 환기하고 싶을 때 듣기 좋은 국내 밴드 록을 중심으로 골라봤어요. "
+            "신나고 강렬한 분위기로 기분을 바꾸며 듣기 좋은 곡들이에요."
+        )
+
     if sleep_request and constraints["instrumental_required"] and verified_instrumental_only:
         return (
-            "어젯밤 생각이 많아 충분히 쉬지 못한 만큼, 잠들기 전 부담 없이 들을 수 있는 잔잔한 연주곡 위주로 골라봤어요. "
-            "복잡한 생각에서 잠시 거리를 두고 편하게 쉬어가고 싶은 순간에 어울리는 곡들입니다."
+            "어젯밤 생각이 많아 충분히 쉬지 못한 만큼, 지금 잠시 편안하게 쉬어가며 들을 수 있는 잔잔한 연주곡 위주로 골라봤어요. "
+            "복잡한 생각에서 잠시 거리를 두고 싶을 때 부담 없이 곁들이기 좋은 곡들이에요."
         )
 
     if comfort_request or (normalized_mood == "anxious" and job_search_request):
@@ -937,13 +1166,41 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
         "짧은 분위기 환기": "공부 흐름을 크게 바꾸지 않고 분위기를 잠깐 바꾸고 싶을 때 잘 어울려요.",
         "기분 좋은 흐름 유지": "지금의 좋은 흐름을 그대로 이어가며 듣기 좋아요.",
         "몰입 상태 이어가기": "지금의 몰입을 무리 없이 이어가고 싶을 때 잘 맞아요.",
-        "잠들기 전 긴장 내려놓기": "잠들기 전 몸과 마음의 긴장을 조금 내려놓고 싶을 때 잘 어울려요.",
+        "긴장 내려놓기": "지금 쌓인 긴장을 조금 내려놓고 싶을 때 잘 어울려요.",
         "생각의 속도 늦추기": "생각이 계속 이어져 쉽게 잠들기 어려운 순간에, 머릿속의 속도를 조금 늦추며 듣기 좋아요.",
-        "조용히 쉬어가기": "자극적인 분위기보다 조용히 쉬어가고 싶은 밤에 부담 없이 들을 수 있어요.",
-        "수면 전 분위기 가라앉히기": "잠자리에 들기 전 차분한 분위기로 하루를 마무리하고 싶을 때 잘 맞아요.",
-        "복잡한 생각에서 거리 두기": "여러 생각이 한꺼번에 떠오를 때 잠시 다른 곳에 마음을 두고 싶다면 들어보세요.",
-        "편안한 잠자리 준비": "잠들기 전 편안한 시간을 만들고 싶은 순간에 곁들이기 좋아요.",
+        "감정을 조용히 정리하기": "마음이 쉽게 가라앉지 않을 때 오늘의 감정을 천천히 정리하며 듣기 좋습니다.",
+        "생각을 가볍게 정돈하기": "머릿속에 남은 생각을 가볍게 정돈하고 싶을 때 잘 맞아요.",
+        "복잡한 생각에서 잠시 거리 두기": "여러 생각이 한꺼번에 떠오를 때, 잠시 다른 흐름에 마음을 두고 쉬어가고 싶다면 잘 어울려요.",
+        "휴식 분위기로 전환하기": "잠시 휴식하는 분위기로 자연스럽게 전환하고 싶을 때 잘 어울려요.",
+        "여행 출발 전 기분 끌어올리기": "여행을 떠나는 설렘을 그대로 이어가고 싶을 때 듣기 좋아요.",
+        "차 안 분위기 밝게 유지하기": "이동하는 동안 차 안 분위기를 밝게 이어가고 싶을 때 듣기 좋아요.",
+        "가족이 함께 즐기기": "가족과 함께 이동하며 다 같이 흥겹게 듣고 싶을 때 잘 맞아요.",
+        "이동 중 분위기 환기하기": "이동이 길어져 분위기를 가볍게 바꾸고 싶을 때 어울려요.",
+        "여름 드라이브 분위기 살리기": "여름 여행의 들뜬 분위기를 조금 더 살리고 싶은 순간에 듣기 좋아요.",
+        "여행의 설렘 이어가기": "목적지로 향하는 시간을 즐겁게 이어가고 싶을 때 듣기 좋아요.",
+        "새벽 분위기에 천천히 잠기기": "새벽 특유의 고요한 분위기에 천천히 잠기고 싶을 때 잘 맞아요.",
+        "혼자 생각에 머물기": "혼자 생각이 길어지는 순간에 듣기 좋아요.",
+        "센치한 감정을 따라가기": "센치해진 감정을 억지로 바꾸지 않고 따라가고 싶을 때 잘 어울려요.",
+        "몽환적인 분위기 유지하기": "새벽의 센치한 흐름에 더 깊이 잠기고 싶을 때 잘 맞아요.",
+        "감정의 여운 이어가기": "마음에 남은 여운을 천천히 느끼고 싶을 때 듣기 좋아요.",
+        "새벽의 고요함에 머물기": "새벽에 혼자 조용한 시간을 보내고 싶을 때 잘 어울려요.",
+        "답답한 기분 강하게 환기하기": "답답한 기분을 강한 음악으로 환기하고 싶을 때 듣기 좋아요.",
+        "분노의 에너지와 맞추기": "화가 아직 가라앉지 않았을 때 강한 분위기의 음악을 듣고 싶다면 잘 맞아요.",
+        "신나는 록으로 방향 바꾸기": "스트레스를 잠시 잊고 분위기를 바꾸고 싶을 때 어울려요.",
+        "속이 답답할 때 텐션 올리기": "속이 답답할 때 강렬한 록으로 분위기를 바꾸고 싶다면 듣기 좋아요.",
+        "밴드 사운드에 몰입하기": "강렬한 밴드 음악에 집중해 듣고 싶을 때 잘 맞아요.",
+        "기분을 확 바꾸기": "지금의 기분을 빠르게 전환하고 싶을 때 어울려요.",
     }
+    family_templates = {
+        "여행 출발 전 기분 끌어올리기": "여행을 떠나는 설렘을 그대로 이어가고 싶을 때 듣기 좋아요.",
+        "차 안 분위기 밝게 유지하기": "이동하는 동안 차 안의 밝은 분위기를 이어가고 싶을 때 잘 맞아요.",
+        "가족이 함께 즐기기": "가족과 함께 흥겹게 듣고 싶은 순간에 잘 맞아요.",
+        "이동 중 분위기 환기하기": "이동이 길어져 차 안 분위기를 가볍게 환기하고 싶을 때 듣기 좋아요.",
+        "여름 드라이브 분위기 살리기": "여름 여행의 들뜬 분위기를 조금 더 살리고 싶은 순간에 듣기 좋아요.",
+        "여행의 설렘 이어가기": "목적지로 향하는 시간에 기분 좋게 듣고 싶을 때 잘 맞아요.",
+    }
+    if focus in family_templates:
+        return family_templates[focus]
     if focus in templates:
         return templates[focus]
     if situation_angle:
@@ -954,7 +1211,9 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
     ][index % 2]
 
 
-def _tag_feature_sentence(track_tags: list[str], tag_labels: dict[str, str]) -> str | None:
+def _tag_feature_sentence(
+    track_tags: list[str], tag_labels: dict[str, str], variant_index: int = 0
+) -> str | None:
     tag_set = set(track_tags)
     combinations = (
         (("dreamy", "calm"), "몽환적이고 차분하게 가라앉는 분위기가 부담 없이 이어지는 곡이에요."),
@@ -975,7 +1234,54 @@ def _tag_feature_sentence(track_tags: list[str], tag_labels: dict[str, str]) -> 
     secondary_feature = next((feature for feature in features[1:] if feature != primary_feature), None)
     if secondary_feature:
         return f"{primary_feature}, {secondary_feature}처럼 서로 다른 특징이 함께 느껴지는 곡이에요."
-    return f"{primary_feature} 같은 특징이 느껴지는 곡이에요."
+    natural_single_features = {
+        "경쾌한 에너지": (
+            "밝고 신나는 분위기가 가볍게 이어지는 곡이에요.",
+            "기분 좋은 활기가 자연스럽게 살아 있는 곡이에요.",
+            "신나는 분위기가 부담 없이 이어지는 곡이에요.",
+        ),
+        "높은 에너지": (
+            "활기찬 분위기가 또렷하게 느껴지는 곡이에요.",
+            "기분을 밝게 끌어올리는 에너지가 느껴지는 곡이에요.",
+        ),
+        "추진력 있는 리듬": "힘 있게 이어지는 분위기가 인상적인 곡이에요.",
+    }
+    sentence = natural_single_features.get(primary_feature)
+    if isinstance(sentence, tuple):
+        return sentence[variant_index % len(sentence)]
+    if isinstance(sentence, str):
+        return sentence
+    return f"{primary_feature}이 자연스럽게 드러나는 곡이에요."
+
+
+def _family_trip_feature_sentence(reason_facts: dict[str, object], index: int) -> str | None:
+    """Use the family playlist's verified ranking cue before generic energy metadata."""
+    tags = {str(tag).strip().lower() for tag in reason_facts.get("tags", []) if str(tag).strip()}
+    cross_generation_fit = int(reason_facts.get("cross_generation_fit") or 0)
+    role_index = index % 6
+    if role_index == 1 and tags & {"mainstream", "broad_familiarity_ko"}:
+        return "여러 사람이 비교적 익숙하게 들을 수 있는 대중적인 곡이에요."
+    if role_index == 2 and "mainstream" in tags:
+        return "대중적으로 익숙한 편인 곡이에요."
+    if role_index == 4 and cross_generation_fit >= 3:
+        return "세대가 달라도 비교적 익숙하게 느낄 수 있는 곡이에요."
+    if role_index == 4 and "summer" in tags:
+        return "여름의 밝은 분위기와 잘 어울리는 곡이에요."
+    if role_index == 5 and "summer" in tags:
+        return "여름의 밝은 분위기와 잘 어울리는 곡이에요."
+    if role_index == 0 and tags & {"upbeat", "high_energy"}:
+        return "밝고 신나는 분위기가 또렷하게 느껴지는 곡이에요."
+    if role_index == 3 and tags & {"upbeat", "high_energy"}:
+        return "흥겹고 활기찬 분위기가 또렷한 곡이에요."
+    if "broad_familiarity_ko" in tags:
+        return "여러 사람이 비교적 익숙하게 들을 수 있는 대중적인 곡이에요."
+    if "mainstream" in tags:
+        return "대중적으로 익숙한 편인 곡이에요."
+    if "summer" in tags:
+        return "여름의 밝은 분위기와 잘 어울리는 곡이에요."
+    if tags & {"upbeat", "high_energy"}:
+        return "밝고 신나는 분위기가 자연스럽게 이어지는 곡이에요."
+    return None
 
 
 def _sleep_feature_sentence(track_tags: list[str], track_moods: list[str]) -> str | None:
@@ -988,10 +1294,61 @@ def _sleep_feature_sentence(track_tags: list[str], track_moods: list[str]) -> st
         return "클래식 피아노 중심의 연주가 조용히 이어지는 곡이에요."
     if "ambient" in tag_set and "calm" in mood_set:
         return "앰비언트 기반의 차분한 분위기가 이어지는 연주곡이에요."
+    if {"jazz", "standard"}.issubset(tag_set) and "calm" in mood_set:
+        return "차분한 재즈 연주가 중심이 되는 곡이에요."
     if "calm" in tag_set or "calm" in mood_set:
         return "차분한 분위기가 부담 없이 이어지는 연주곡이에요."
     if "dreamy" in tag_set:
         return "몽환적인 분위기가 잔잔하게 이어지는 연주곡이에요."
+    return None
+
+
+def _dawn_sentimental_feature_sentence(
+    track_tags: list[str], recommendation_role: dict[str, str] | None = None
+) -> str | None:
+    """Describe only verified traits that fit a dreamy, late-night playlist."""
+    tags = {str(tag).lower() for tag in track_tags if tag}
+    role_focus = (recommendation_role or {}).get("focus", "")
+    if {"piano", "instrumental"}.issubset(tags):
+        return "피아노 중심의 연주가 자연스럽게 이어지는 곡이에요."
+    if {"dream-pop", "dreamy"}.issubset(tags):
+        return "드림 팝 특유의 몽환적인 분위기가 느껴지는 곡이에요."
+    if {"rnb", "soul"}.issubset(tags):
+        return "R&B/Soul 계열의 분위기가 자연스럽게 이어지는 곡이에요."
+    if {"soft", "emotional"}.issubset(tags):
+        return "부드럽고 감성적인 분위기가 자연스럽게 이어지는 곡이에요."
+    if "soft" in tags:
+        return "부드러운 분위기가 자연스럽게 이어지는 곡이에요."
+    if "calm" in tags and role_focus == "혼자 생각에 머물기":
+        return "차분한 분위기가 자연스럽게 이어지는 곡이에요."
+    if "ambient" in tags:
+        return "앰비언트 분위기가 자연스럽게 이어지는 곡이에요."
+    if {"rnb", "soul", "emotional"}.issubset(tags):
+        return "R&B/Soul 계열의 감성적인 분위기가 느껴지는 곡이에요."
+    if "dreamy" in tags:
+        return "몽환적인 분위기가 자연스럽게 이어지는 곡이에요."
+    if "emotional" in tags:
+        return "감성적인 분위기가 자연스럽게 이어지는 곡이에요."
+    if "soft" in tags:
+        return "부드러운 분위기가 자연스럽게 이어지는 곡이에요."
+    return None
+
+
+def _korean_band_rock_feature_sentence(track_tags: list[str], index: int = 0) -> str | None:
+    """Use one verified rock feature without exposing a raw tag list."""
+    tags = {str(tag).lower() for tag in track_tags if tag}
+    if "pop-rock" in tags:
+        return "팝 록 특유의 선명한 분위기가 느껴지는 곡이에요."
+    if "alternative" in tags:
+        return "얼터너티브 록 특유의 강한 분위기가 느껴지는 곡이에요."
+    if "punk" in tags:
+        return "펑크 록의 신나는 분위기가 또렷한 곡이에요."
+    if "high_energy" in tags:
+        return "강렬한 록 분위기가 또렷한 곡이에요."
+    if "upbeat" in tags:
+        return "신나는 록 분위기가 자연스럽게 이어지는 곡이에요."
+    if "rock" in tags:
+        return "록 사운드가 중심인 곡이에요."
     return None
 
 
@@ -1027,6 +1384,25 @@ def build_track_reason(
     elif vibe_text:
         context_hook = f"{vibe_text} 톤"
 
+    facts = track.reason_facts or {}
+    track_tags = [str(tag) for tag in facts.get("tags", []) if tag]
+    track_moods = [str(item) for item in facts.get("moods", []) if item]
+    if _is_family_trip_request(context_text):
+        family_feature = _family_trip_feature_sentence(facts, index)
+        if family_feature:
+            return f"{family_feature} {_role_listening_sentence(recommendation_role, index)}"
+    if _prefers_korean_band_rock(context_text):
+        rock_feature = _korean_band_rock_feature_sentence(track_tags, index)
+        if rock_feature:
+            return f"{rock_feature} {_role_listening_sentence(recommendation_role, index)}"
+    if _is_sleep_request(context_text):
+        sleep_feature = _sleep_feature_sentence(track_tags, track_moods)
+        if sleep_feature:
+            return f"{sleep_feature} {_role_listening_sentence(recommendation_role, index)}"
+    if _is_dawn_sentimental_request(context_text):
+        dawn_feature = _dawn_sentimental_feature_sentence(track_tags, recommendation_role)
+        if dawn_feature:
+            return f"{dawn_feature} {_role_listening_sentence(recommendation_role, index)}"
     sound_hint = _get_track_sound_hint(track)
     if sound_hint:
         sound_point, _ = sound_hint
@@ -1034,14 +1410,6 @@ def build_track_reason(
             f"{_attach_particle(sound_point)} 자연스럽게 드러나는 곡이에요. "
             f"{_role_listening_sentence(recommendation_role, index)}"
         )
-
-    facts = track.reason_facts or {}
-    track_tags = [str(tag) for tag in facts.get("tags", []) if tag]
-    track_moods = [str(item) for item in facts.get("moods", []) if item]
-    if _is_sleep_request(context_text):
-        sleep_feature = _sleep_feature_sentence(track_tags, track_moods)
-        if sleep_feature:
-            return f"{sleep_feature} {_role_listening_sentence(recommendation_role, index)}"
     situation = _reason_situation(normalized_mood, context_text)
     tag_labels = {
         "soft": "부드러운 사운드",
@@ -1053,13 +1421,13 @@ def build_track_reason(
         "love": "사랑 노래 분위기",
         "soul": "소울 계열의 정서",
         "rnb": "R&B 계열의 그루브",
-        "instrumental": "연주 중심 구성",
+        "instrumental": "연주곡",
         "jazz": "재즈 계열의 리듬",
         "upbeat": "경쾌한 에너지",
         "high_energy": "높은 에너지",
         "driving": "추진력 있는 리듬",
     }
-    feature_sentence = _tag_feature_sentence(track_tags, tag_labels)
+    feature_sentence = _tag_feature_sentence(track_tags, tag_labels, index)
     if feature_sentence:
         return (
             f"{feature_sentence} "
@@ -1072,6 +1440,20 @@ def build_track_reason(
     }
     is_studying = any(token in (context_text or "").lower() for token in ("공부", "과제", "작업", "집중", "몰입"))
     is_preparing_sleep = _is_sleep_request(context_text)
+    is_family_trip = _is_family_trip_request(context_text)
+    if is_family_trip:
+        family_openings = (
+            "여행을 앞둔 설렘을 가볍게 이어가기 좋은 곡이에요.",
+            "차 안에서 밝은 분위기를 이어가기 좋은 곡이에요.",
+            "가족과 함께 부담 없이 곁들이기 좋은 곡이에요.",
+            "이동 중 분위기에 가벼운 변화를 더하기 좋은 곡이에요.",
+            "여름 여행의 들뜬 기분과 어울리는 곡이에요.",
+            "목적지로 향하는 시간에 기분 좋게 곁들이기 좋은 곡이에요.",
+        )
+        return (
+            f"{family_openings[index % len(family_openings)]} "
+            f"{_role_listening_sentence(recommendation_role, index)}"
+        )
     fallback_opening = (
         "자극적인 분위기보다 편안하게 쉬어갈 수 있는 방향으로 고른 곡이에요."
         if is_preparing_sleep
@@ -1216,13 +1598,25 @@ def build_track_reason(
 
 def _search_track(access_token: str, name: str, artist_name: str, reason: str) -> TrackSummary | None:
     # Spotify 검색은 정확한 문장 매칭에 약해서, 제목/아티스트 조합을 여러 방식으로 시도한다.
-    queries = [
-        f'track:"{name}" artist:"{artist_name}"',
-        f"{name} {artist_name}",
-        f'track:"{name}"',
-        name,
-        artist_name,
-    ]
+    artist_aliases = _SPOTIFY_ARTIST_ALIASES.get((name, artist_name), ())
+    title_aliases = _SPOTIFY_TRACK_ALIASES.get((name, artist_name), ())
+    accepted_artists = {_canonical_track_token(artist_name)} | {
+        _canonical_track_token(alias) for alias in artist_aliases
+    }
+    accepted_titles = {_canonical_track_token(name)} | {_canonical_track_token(alias) for alias in title_aliases}
+    title_candidates = (name, *title_aliases)
+    artist_candidates = (artist_name, *artist_aliases)
+    queries = list(
+        dict.fromkeys(
+            [
+                *[f'track:"{title}" artist:"{artist}"' for title in title_candidates for artist in artist_candidates],
+                *[f"{title} {artist_name}" for title in title_candidates],
+                *[f'track:"{title}"' for title in title_candidates],
+                *title_candidates,
+                artist_name,
+            ]
+        )
+    )
 
     for query in queries:
         try:
@@ -1246,9 +1640,7 @@ def _search_track(access_token: str, name: str, artist_name: str, reason: str) -
             )
             if album_image_url or spotify_url:
                 mapped = _map_track(track, artist_name, [name])
-                if _canonical_track_token(mapped.name) == _canonical_track_token(name) and _canonical_track_token(
-                    mapped.artist_name
-                ) == _canonical_track_token(artist_name):
+                if _canonical_track_token(mapped.name) in accepted_titles and _canonical_track_token(mapped.artist_name) in accepted_artists:
                     mapped.reason_facts = _build_reason_facts(name, artist_name)
                     mapped.reason = reason
                     return mapped
@@ -1305,8 +1697,12 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
     context_lower = (context_text or "").lower()
     korean_rnb_request = _context_prefers_korean_rnb(context_text)
     punk_request = _context_prefers_punk_rock(context_text)
+    korean_band_rock_strength = _korean_band_rock_preference_strength(context_text)
     comfort_request = _context_requests_comfort(context_text)
     sleep_request = _is_sleep_request(context_text)
+    dawn_sentimental_request = _is_dawn_sentimental_request(context_text)
+    mbti_aesthetic = detect_mbti_aesthetic(context_text)
+    family_trip_request = _is_family_trip_request(context_text)
     explicit_genres, _, _ = _extract_genre_family_matches(context_text)
     explicit_genre_set = set(explicit_genres)
 
@@ -1336,6 +1732,23 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
         score -= 6
     if punk_request and candidate_artist in {"Green Day", "Paramore", "Blink-182", "Fall Out Boy", "Sum 41", "The Offspring", "Panic! At The Disco"}:
         score += 8
+    if korean_band_rock_strength:
+        exact_match = {"origin_kr", "artist_band", "rock"}.issubset(candidate_tags)
+        if exact_match:
+            score += 100 if korean_band_rock_strength in {"hard", "strong"} else 45
+        elif korean_band_rock_strength == "hard":
+            score -= 100
+        elif korean_band_rock_strength == "strong":
+            score -= 45
+        if mood == "angry":
+            if "high_energy" in candidate_tags:
+                score += 20
+            if "upbeat" in candidate_tags:
+                score += 14
+            if candidate_tags & {"alternative", "punk", "pop-rock"}:
+                score += 8
+            if "sad" in candidate_moods and not candidate_tags & {"upbeat", "high_energy"}:
+                score -= 14
     if comfort_request and candidate_tags & {"soft", "emotional", "calm", "dreamy", "warm", "comfort", "love", "soul"}:
         score += 12
     if comfort_request and candidate_tags & {"punk", "pop-punk", "rock", "high_energy", "driving"}:
@@ -1351,10 +1764,59 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
             score += 22
         if candidate_tags & {"calm", "soft", "dreamy", "emotional"}:
             score += 12
-        if candidate_tags & {"fusion", "bebop", "hard-bop", "swing", "big-band", "high_energy", "driving"}:
+        if candidate_tags & {
+            "fusion",
+            "bebop",
+            "hard-bop",
+            "swing",
+            "big-band",
+            "bossa-nova",
+            "latin",
+            "high_energy",
+            "driving",
+        }:
             score -= 28
         if candidate_tags & {"jazz", "standard"}:
             score += 3
+    if dawn_sentimental_request:
+        # This request seeks mood congruence, not emotional regulation. Favor
+        # verified dreamy and sentimental cues while keeping the playlist low-key.
+        if "dreamy" in candidate_tags:
+            score += 30
+        if "emotional" in candidate_tags:
+            score += 16
+        if candidate_tags & {"soft", "calm", "ambient", "rnb", "soul", "dream-pop", "hip-hop"}:
+            score += 8
+        if candidate_moods & {"sad", "lonely", "calm"}:
+            score += 5
+        if candidate_tags & {"high_energy", "driving", "punk", "pop-punk", "rock", "anime", "soundtrack"}:
+            score -= 24
+        sound_hint = TRACK_SOUND_HINTS.get((candidate_name.lower(), candidate_artist.lower()))
+        if sound_hint and any(marker in sound_hint[0] for marker in ("빠른", "속도감", "촘촘")):
+            score -= 20
+    if mbti_aesthetic:
+        # MBTI wording is only a weak aesthetic tie-breaker. Direct context tags,
+        # activity, and constraints have already contributed larger scores above.
+        matched_aesthetic_tags = candidate_tags & set(mbti_aesthetic["ranking_tags"])
+        score += min(6, len(matched_aesthetic_tags) * 2)
+    if family_trip_request:
+        # This local tag is a reviewed Korean multi-generation familiarity cue;
+        # do not substitute global Spotify popularity for it.
+        if "broad_familiarity_ko" in candidate_tags:
+            score += 10
+        score += int(candidate.get("cross_generation_fit") or 0) * 14
+        if candidate_tags & {"mainstream", "family_trip"}:
+            score += 16
+        if "upbeat" in candidate_tags:
+            score += 8
+        if _current_season() == "summer" and "summer" in candidate_tags:
+            score += 6
+        if candidate_tags & {"punk", "rock", "anime", "hard-bop", "bebop"}:
+            score -= 12
+        if "youth_skewed" in candidate_tags:
+            score -= 40
+        if "global_only" in candidate_tags:
+            score -= 40
     if any(token in context_lower for token in ("스윙", "swing", "빅밴드", "big band")) and candidate_tags & {"jazz", "standard", "instrumental"}:
         score += 7
     if any(token in context_lower for token in ("비밥", "bebop", "bop", "하드밥", "hard bop", "포스트밥", "post-bop")) and candidate_tags & {"jazz", "instrumental"}:
@@ -1392,7 +1854,19 @@ def _select_fallback_catalog(
             for candidate in catalog
             if "instrumental" in {str(tag).lower() for tag in candidate.get("tags", []) if tag}
         ]
-    if _context_prefers_korean_rnb(context_text):
+    if _is_dawn_sentimental_request(context_text):
+        preferred = [
+            candidate
+            for candidate in catalog
+            if "dreamy" in {str(tag) for tag in candidate.get("tags", []) if tag}
+            or (
+                "emotional" in {str(tag) for tag in candidate.get("tags", []) if tag}
+                and {str(tag) for tag in candidate.get("tags", []) if tag} & {"soft", "rnb", "soul"}
+            )
+        ]
+        if preferred:
+            catalog = preferred + [candidate for candidate in catalog if candidate not in preferred]
+    elif _context_prefers_korean_rnb(context_text):
         preferred = [
             candidate
             for candidate in catalog
@@ -1420,6 +1894,20 @@ def _select_fallback_catalog(
         ]
         if preferred:
             catalog = preferred + [candidate for candidate in catalog if candidate not in preferred]
+    elif _prefers_korean_band_rock(context_text):
+        exact = [
+            candidate
+            for candidate in catalog
+            if {"origin_kr", "artist_band", "rock"}.issubset(
+                {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+            )
+        ]
+        # "위주" is a strong majority preference. Do not fill a six-track
+        # playlist with overseas rock when the reviewed Korean-band pool is sufficient.
+        if len(exact) >= limit or _korean_band_rock_preference_strength(context_text) == "hard":
+            catalog = exact
+        elif exact:
+            catalog = exact + [candidate for candidate in catalog if candidate not in exact]
 
     if selection_guidance and not _has_explicit_genre_request(context_text):
         avoid_tags = {str(tag) for tag in selection_guidance.get("avoid_tags", [])}
@@ -1446,12 +1934,27 @@ def _select_fallback_catalog(
     )
     unique: list[dict[str, object]] = []
     seen: set[tuple[str, str]] = set()
+    seen_artists: set[str] = set()
+    generation_counts: dict[str, int] = {}
+    diversify_family_trip = _is_family_trip_request(context_text)
+    diversify_korean_band_rock = _prefers_korean_band_rock(context_text)
     for candidate in ranked:
         key = (str(candidate.get("name") or ""), str(candidate.get("artist_name") or ""))
         if key in seen:
             continue
+        artist_key = str(candidate.get("artist_name") or "").strip().lower()
+        if (diversify_family_trip or diversify_korean_band_rock) and artist_key in seen_artists:
+            continue
+        generation = str(candidate.get("generation") or "unspecified")
+        # Family familiarity is playlist-level: do not let a single age group
+        # consume most of the six slots merely because its songs score highest.
+        generation_limit = 1 if generation == "legacy" else 4 if generation == "bridge" else 2
+        if diversify_family_trip and generation != "unspecified" and generation_counts.get(generation, 0) >= generation_limit:
+            continue
         seen.add(key)
+        seen_artists.add(artist_key)
         unique.append(candidate)
+        generation_counts[generation] = generation_counts.get(generation, 0) + 1
         if len(unique) >= limit:
             break
     return unique
@@ -1465,9 +1968,16 @@ def _fallback_tracks(
     selection_guidance: dict[str, Any] | None = None,
 ) -> list[TrackSummary]:
     constraints = extract_hard_constraints(context_text)
-    # For a hard instrumental request, keep searching the verified catalog until
-    # enough tracks with real Spotify album art are available.
-    catalog_limit = len(FALLBACK_LIBRARY) if access_token and constraints["instrumental_required"] else limit
+    # Album art is a display enhancement, never a reason to replace a more
+    # sleep-suitable verified track with a lower-ranked one.
+    cover_can_expand_candidates = bool(
+        access_token
+        and (
+            (constraints["instrumental_required"] and not _is_sleep_request(context_text))
+            or _prefers_korean_band_rock(context_text)
+        )
+    )
+    catalog_limit = len(FALLBACK_LIBRARY) if cover_can_expand_candidates else limit
     catalog = _select_fallback_catalog(mood, context_text, catalog_limit, selection_guidance)
     if not access_token:
         tracks = [
@@ -1475,17 +1985,21 @@ def _fallback_tracks(
                 track_id=f"fallback-{mood}-{index + 1}",
                 name=str(item["name"]),
                 artist_name=str(item["artist_name"]),
-                reason_facts=_build_reason_facts(str(item["name"]), str(item["artist_name"])),
+                display_title=str(item["name"]),
+                spotify_search_title=_spotify_search_title(str(item["name"]), str(item["artist_name"])),
+                reason_facts=_build_contextual_reason_facts(str(item["name"]), str(item["artist_name"]), context_text),
                 reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                 spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
             )
             for index, item in enumerate(catalog)
         ]
-        return validate_hard_constraints(tracks, context_text)
+        return _enforce_korean_band_rock_selection(
+            validate_hard_constraints(tracks, context_text), context_text, limit
+        )
 
     resolved: list[TrackSummary] = []
     unresolved: list[TrackSummary] = []
-    cover_first = constraints["instrumental_required"]
+    cover_first = bool(cover_can_expand_candidates)
     for index, item in enumerate(catalog):
         try:
             track = _search_track(
@@ -1495,7 +2009,21 @@ def _fallback_tracks(
                 str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
             )
             if track is not None and (track.album_image_url or not cover_first):
-                resolved.append(track)
+                # Keep the curated Korean display identity. Spotify's canonical
+                # title is enrichment metadata only and must not change the UI.
+                display_name = str(item["name"])
+                display_artist = str(item["artist_name"])
+                enriched_track = track.model_copy(
+                    update={
+                        "name": display_name,
+                        "artist_name": display_artist,
+                        "display_title": display_name,
+                        "spotify_search_title": _spotify_search_title(display_name, display_artist),
+                        "spotify_track_name": track.spotify_track_name or track.name,
+                        "reason_facts": _build_contextual_reason_facts(display_name, display_artist, context_text),
+                    }
+                )
+                resolved.append(enriched_track)
                 if len(resolved) >= limit:
                     break
                 continue
@@ -1510,7 +2038,9 @@ def _fallback_tracks(
                     track_id=f"fallback-{mood}-{index + 1}",
                     name=str(item["name"]),
                     artist_name=str(item["artist_name"]),
-                    reason_facts=_build_reason_facts(str(item["name"]), str(item["artist_name"])),
+                    display_title=str(item["name"]),
+                    spotify_search_title=_spotify_search_title(str(item["name"]), str(item["artist_name"])),
+                    reason_facts=_build_contextual_reason_facts(str(item["name"]), str(item["artist_name"]), context_text),
                     reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                     spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
                 )
@@ -1522,7 +2052,9 @@ def _fallback_tracks(
                 track_id=f"fallback-{mood}-{index + 1}",
                 name=str(item["name"]),
                 artist_name=str(item["artist_name"]),
-                reason_facts=_build_reason_facts(str(item["name"]), str(item["artist_name"])),
+                display_title=str(item["name"]),
+                spotify_search_title=_spotify_search_title(str(item["name"]), str(item["artist_name"])),
+                reason_facts=_build_contextual_reason_facts(str(item["name"]), str(item["artist_name"]), context_text),
                 reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                 spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
             )
@@ -1532,7 +2064,9 @@ def _fallback_tracks(
 
     if cover_first and len(resolved) < limit:
         resolved.extend(unresolved[: limit - len(resolved)])
-    return validate_hard_constraints(resolved[:limit], context_text)
+    return _enforce_korean_band_rock_selection(
+        validate_hard_constraints(resolved[:limit], context_text), context_text, limit
+    )
 
 
 def recommend_tracks(
@@ -1547,6 +2081,18 @@ def recommend_tracks(
     profile = MOOD_PROFILES.get(normalized_mood, MOOD_PROFILES["calm"])
     mood_label = str(profile["label"])
 
+    # For a strong Korean-band-rock request, start from the reviewed origin/type/
+    # genre catalog. Generic Spotify rock recommendations are otherwise mostly
+    # overseas artists and can exhaust the six slots before filtering.
+    if _korean_band_rock_preference_strength(context_text) in {"hard", "strong"}:
+        return _fallback_tracks(
+            normalized_mood,
+            access_token=access_token or _get_app_access_token(),
+            context_text=context_text,
+            limit=limit,
+            selection_guidance=selection_guidance,
+        )
+
     if constraints["instrumental_required"]:
         # Spotify search/recommendation responses expose no verified vocals field.
         # Stay within the tagged catalog rather than returning an unverified track.
@@ -1559,7 +2105,15 @@ def recommend_tracks(
         )
 
     if not access_token:
-        return _fallback_tracks(normalized_mood, access_token=None, context_text=context_text, limit=limit, selection_guidance=selection_guidance)
+        # A client login is not required to retrieve public album artwork for
+        # curated fallback tracks; use the app credential when configured.
+        return _fallback_tracks(
+            normalized_mood,
+            access_token=_get_app_access_token(),
+            context_text=context_text,
+            limit=limit,
+            selection_guidance=selection_guidance,
+        )
 
     try:
         has_explicit_genre_request = _has_explicit_genre_request(context_text)
@@ -1596,14 +2150,16 @@ def recommend_tracks(
                 seen_pairs.add(key)
                 curated_tracks.append(track)
                 if len(curated_tracks) >= limit:
-                    return curated_tracks[:limit]
+                    return _enforce_korean_band_rock_selection(curated_tracks, context_text, limit)
 
         if len(curated_tracks) >= limit:
-            return curated_tracks[:limit]
+            return _enforce_korean_band_rock_selection(curated_tracks, context_text, limit)
 
         response = _spotify_request(SPOTIFY_RECOMMENDATIONS_URL, access_token, params=query)
         tracks = response.get("tracks") or []
         mapped_tracks = [_map_track(track, mood_label, seed_genres) for track in tracks if isinstance(track, dict)]
+        if _is_family_trip_request(context_text):
+            mapped_tracks.sort(key=lambda track: int(track.reason_facts.get("popularity", 0)), reverse=True)
         if mapped_tracks:
             unique_tracks: list[TrackSummary] = list(curated_tracks)
             for track in mapped_tracks:
@@ -1629,7 +2185,7 @@ def recommend_tracks(
                     unique_tracks.append(filler)
                     if len(unique_tracks) >= limit:
                         break
-            return unique_tracks[:limit]
+            return _enforce_korean_band_rock_selection(unique_tracks, context_text, limit)
     except SpotifyRecommendationError:
         return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance)
     except Exception:

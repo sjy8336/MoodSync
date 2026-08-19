@@ -7,6 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from app.core.config import settings
+from app.services.mbti_aesthetics import detect_mbti_aesthetic
 
 
 GEMINI_ALLOWED_MOODS = {
@@ -31,7 +32,7 @@ _USER_FACING_METADATA_LABELS = {
     "emotional": "감정적인 분위기",
     "rnb": "R&B",
     "soul": "소울",
-    "instrumental": "연주 중심 구성",
+    "instrumental": "연주곡",
     "jazz": "재즈",
     "upbeat": "경쾌한 에너지",
     "high_energy": "높은 에너지",
@@ -83,13 +84,40 @@ _STUDY_FLOW_ROLES = [
     ("짧은 분위기 환기", "공부 흐름을 크게 바꾸지 않고 분위기를 잠깐 바꾸고 싶을 때"),
 ]
 
+_CATHARTIC_KOREAN_ROCK_ROLES = [
+    ("답답한 기분 강하게 환기하기", "답답한 기분을 강한 음악으로 환기하고 싶을 때"),
+    ("분노의 에너지와 맞추기", "화가 아직 가라앉지 않았을 때 강한 분위기의 음악을 듣고 싶다면"),
+    ("신나는 록으로 방향 바꾸기", "스트레스를 잠시 잊고 분위기를 바꾸고 싶을 때"),
+    ("속이 답답할 때 텐션 올리기", "속이 답답할 때 강렬한 록으로 분위기를 바꾸고 싶을 때"),
+    ("밴드 사운드에 몰입하기", "강렬한 밴드 음악에 집중해 듣고 싶을 때"),
+    ("기분을 확 바꾸기", "지금의 기분을 빠르게 전환하고 싶을 때"),
+]
+
 _SLEEP_ROLES = [
-    ("잠들기 전 긴장 내려놓기", "잠들기 전 몸과 마음의 긴장을 조금 내려놓고 싶을 때"),
+    ("긴장 내려놓기", "지금 쌓인 긴장을 조금 내려놓고 싶을 때"),
     ("생각의 속도 늦추기", "생각이 계속 이어져 쉽게 잠들기 어려운 순간"),
-    ("조용히 쉬어가기", "자극적인 분위기보다 조용히 쉬어가고 싶은 밤"),
-    ("수면 전 분위기 가라앉히기", "잠자리에 들기 전 하루를 차분히 마무리하고 싶을 때"),
-    ("복잡한 생각에서 거리 두기", "여러 생각이 한꺼번에 떠오르는 순간"),
-    ("편안한 잠자리 준비", "편안한 분위기 속에서 잠자리를 준비하고 싶을 때"),
+    ("감정을 조용히 정리하기", "마음이 쉽게 가라앉지 않을 때"),
+    ("생각을 가볍게 정돈하기", "머릿속에 남은 생각을 가볍게 정돈하고 싶을 때"),
+    ("복잡한 생각에서 잠시 거리 두기", "여러 생각이 한꺼번에 떠오르는 순간"),
+    ("휴식 분위기로 전환하기", "잠시 휴식하는 분위기로 자연스럽게 전환하고 싶을 때"),
+]
+
+_DAWN_SENTIMENTAL_ROLES = [
+    ("새벽 분위기에 천천히 잠기기", "새벽 특유의 고요한 분위기에 천천히 잠기고 싶을 때"),
+    ("혼자 생각에 머물기", "혼자 생각이 길어지는 순간에"),
+    ("센치한 감정을 따라가기", "센치해진 감정을 억지로 바꾸지 않고 따라가고 싶을 때"),
+    ("몽환적인 분위기 유지하기", "새벽의 센치한 흐름에 더 깊이 잠기고 싶을 때"),
+    ("감정의 여운 이어가기", "마음에 남은 여운을 천천히 느끼고 싶을 때"),
+    ("새벽의 고요함에 머물기", "새벽에 혼자 조용한 시간을 보내고 싶을 때"),
+]
+
+_FAMILY_TRIP_ROLES = [
+    ("여행 출발 전 기분 끌어올리기", "여행을 떠나는 설렘을 그대로 이어가고 싶을 때"),
+    ("차 안 분위기 밝게 유지하기", "이동하는 동안 차 안 분위기를 밝게 이어가고 싶을 때"),
+    ("가족이 함께 즐기기", "가족과 함께 부담 없이 흥겹게 듣고 싶을 때"),
+    ("이동 중 분위기 환기하기", "이동이 길어져 분위기를 가볍게 바꾸고 싶을 때"),
+    ("여름 드라이브 분위기 살리기", "여름 여행 기분을 가볍게 더하고 싶을 때"),
+    ("여행의 설렘 이어가기", "목적지로 향하는 시간을 즐겁게 이어가고 싶을 때"),
 ]
 
 
@@ -107,6 +135,15 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         token in raw_text or token in lowered
         for token in ("수면", "잠들", "잠을", "잠 못", "잠자", "자고 싶", "잘 때")
     )
+    is_family_trip = any(token in raw_text for token in ("가족 여행", "가족여행", "여행")) and any(
+        token in raw_text for token in ("차", "자동차", "드라이브", "이동")
+    )
+    korean_band_rock = any(token in raw_text or token in lowered for token in ("우리나라 밴드", "국내 밴드", "한국 밴드", "korean band")) and any(
+        token in raw_text or token in lowered for token in ("락", "록", "rock")
+    )
+    is_dawn_sentimental = any(token in raw_text or token in lowered for token in ("새벽", "늦은 밤", "밤공기", "센치")) and any(
+        token in raw_text or token in lowered for token in ("감성", "몽환", "센치", "플레이리스트")
+    )
     instrumental_required = any(
         token in lowered
         for token in ("가사가 없는", "가사 없는", "가사없이", "가사 없이", "무가사", "연주곡", "보컬 없는", "보컬이 없는", "instrumental")
@@ -119,13 +156,32 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         "avoid": [],
         "priority": [],
         "hard_constraints": {"instrumental_required": instrumental_required},
+        "mbti_aesthetic": detect_mbti_aesthetic(raw_text),
     }
     if is_preparing_sleep:
         context["context"] = "수면 준비"
         context["current_state"] = ["수면 부족으로 피곤함", "생각이 많아 쉬기 어려움"]
-        context["goal"] = ["잠들기 전 편안한 분위기", "생각을 잠시 내려놓기"]
+        context["goal"] = ["지금 편안하게 쉬는 분위기", "생각을 잠시 내려놓기"]
         context["avoid"] = ["보컬 또는 가사", "수면에 방해되는 높은 자극"]
-        context["priority"] = ["수면 전 안정", "낮은 자극", "연주곡" if instrumental_required else "차분한 분위기"]
+        context["priority"] = ["휴식에 어울리는 분위기", "낮은 자극", "연주곡" if instrumental_required else "차분한 분위기"]
+    elif is_family_trip:
+        context["context"] = "가족 여행의 차 안"
+        context["current_state"] = ["여행을 앞두고 설레는 상태"]
+        context["goal"] = ["여행 기분 살리기", "차 안 분위기 밝게 만들기", "가족이 함께 즐기기"]
+        context["avoid"] = ["지나치게 공격적인 분위기", "특정 취향층에 치우친 곡", "공부 또는 업무 맥락"]
+        context["priority"] = ["가족 여행과 차 안 맥락", "대중적인 친숙함", "신나는 분위기", "현재 계절"]
+    elif korean_band_rock:
+        context["context"] = "국내 밴드 록 감정 전환"
+        context["current_state"] = ["화나는 일이 있어 답답하고 분노가 남아 있음"]
+        context["goal"] = ["강한 음악으로 기분 전환하기", "신나는 록으로 스트레스 받는 감정의 방향 바꾸기"]
+        context["avoid"] = ["공부 또는 업무 맥락", "지나치게 잔잔한 곡", "해외 록 중심의 구성"]
+        context["priority"] = ["한국 밴드 록", "강렬하고 신나는 분위기", "분노와 스트레스 전환"]
+    elif is_dawn_sentimental:
+        context["context"] = "새벽 감성 플레이리스트"
+        context["current_state"] = ["센치하고 사색적인 감정", "혼자 조용히 음악을 듣고 싶은 상태"]
+        context["goal"] = ["새벽의 감성적인 분위기에 머물기", "몽환적이고 감성적인 흐름 이어 듣기"]
+        context["avoid"] = ["공부 또는 업무 맥락", "감정을 억지로 바꾸려는 설명", "지나치게 높은 자극"]
+        context["priority"] = ["몽환적인 분위기", "감성적인 분위기", "새벽의 고요한 청취 맥락", "사색적인 흐름"]
     elif is_studying and is_going_well:
         context["current_state"] = ["이미 집중 흐름이 이어지고 있음", "기분 좋게 몰입 중"]
         context["goal"] = ["현재 공부 흐름 유지", "적당한 활기 유지"]
@@ -135,7 +191,7 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         context["avoid"] = ["지나치게 높은 자극", "집중을 깨는 소란스러움"]
     if is_studying and avoids_overstimulation:
         context["priority"] = ["몰입 유지", "과하지 않은 활기", "높은 에너지"]
-    elif selected_vibes:
+    elif selected_vibes and not context["priority"]:
         context["priority"] = list(selected_vibes)
     return context
 
@@ -259,15 +315,164 @@ def _normalize_reason_facts(facts: object) -> dict[str, object]:
         if text:
             normalized[key] = text
 
-    for key in ("tags", "moods"):
+    for key in ("tags", "moods", "sleep_ranking_factors"):
         values = facts.get(key)
         if not isinstance(values, list):
             continue
-        labels = [_normalize_metadata_text(value) for value in values]
+        labels = [
+            _normalize_metadata_text(value)
+            for value in values
+            if str(value) not in {"mainstream", "family_trip", "summer", "broad_familiarity_ko"}
+        ]
         cleaned = list(dict.fromkeys(label for label in labels if label))
         if cleaned:
             normalized[key] = cleaned[:4]
+    provenance = facts.get("feature_provenance")
+    if isinstance(provenance, dict):
+        normalized["feature_provenance"] = {
+            str(key): str(value)
+            for key, value in provenance.items()
+            if key and value
+        }
     return normalized
+
+
+def _family_trip_reason_anchor(facts: object, role_focus: str) -> str | None:
+    """Choose one verified playlist signal so family-trip copy does not default to energy."""
+    if not isinstance(facts, dict):
+        return None
+
+    tags = {str(tag).strip().lower() for tag in facts.get("tags", []) if str(tag).strip()}
+    cross_generation_fit = int(facts.get("cross_generation_fit") or 0)
+    has_broad_familiarity = "broad_familiarity_ko" in tags
+    has_mainstream_popularity = "mainstream" in tags
+    if role_focus == "차 안 분위기 밝게 유지하기" and tags & {"mainstream", "broad_familiarity_ko"}:
+        return "shared_familiarity"
+    if role_focus == "가족이 함께 즐기기" and has_mainstream_popularity:
+        return "mainstream_popularity"
+    if role_focus == "여름 드라이브 분위기 살리기":
+        if cross_generation_fit >= 3:
+            return "cross_generational_familiarity"
+        if has_broad_familiarity:
+            return "shared_familiarity"
+        if has_mainstream_popularity:
+            return "mainstream_popularity"
+        if "summer" in tags:
+            return "summer_travel"
+        if "family_trip" in tags:
+            return "family_travel"
+    if role_focus in {"여행 출발 전 기분 끌어올리기", "이동 중 분위기 환기하기"} and tags & {"upbeat", "high_energy"}:
+        return "upbeat_moment"
+    if role_focus == "여행의 설렘 이어가기" and "summer" in tags:
+        return "summer_travel"
+    if has_broad_familiarity:
+        return "shared_familiarity"
+    if has_mainstream_popularity:
+        return "mainstream_popularity"
+    if "family_trip" in tags:
+        return "family_travel"
+    if "summer" in tags:
+        return "summer_travel"
+    if tags & {"upbeat", "high_energy"}:
+        return "upbeat_moment"
+    return None
+
+
+def _family_trip_reason_ingredient(facts: object, role: dict[str, str]) -> dict[str, str] | None:
+    """Select one playlist-level reason feature before Gemini sees generic tag summaries."""
+    anchor = _family_trip_reason_anchor(facts, role.get("focus", ""))
+    if not anchor:
+        return None
+
+    primary_features = {
+        "shared_familiarity": "여러 사람이 비교적 익숙하게 들을 수 있는 대중적인 곡",
+        "cross_generational_familiarity": "세대가 달라도 비교적 익숙하게 느낄 수 있는 곡",
+        "mainstream_popularity": "대중적으로 익숙한 편인 곡",
+        "summer_travel": "여름과 잘 어울리는 밝은 분위기",
+        "family_travel": "친숙하게 즐길 수 있는 곡",
+        "upbeat_moment": "밝고 신나는 분위기",
+    }
+    primary_feature = primary_features.get(anchor)
+    if not primary_feature:
+        return None
+    return {
+        "primary_feature": primary_feature,
+        "feature_source": anchor,
+        "secondary_feature": _family_trip_secondary_feature(facts, anchor),
+        "recommendation_role": role.get("focus", ""),
+    }
+
+
+def _family_trip_secondary_feature(facts: object, primary_anchor: str) -> str | None:
+    """Expose one additional verified signal only when it can distinguish similar reasons."""
+    if not isinstance(facts, dict):
+        return None
+
+    tags = {str(tag).strip().lower() for tag in facts.get("tags", []) if str(tag).strip()}
+    cross_generation_fit = int(facts.get("cross_generation_fit") or 0)
+    if primary_anchor == "shared_familiarity" and cross_generation_fit >= 3:
+        return "세대 간 친숙함"
+    if primary_anchor == "mainstream_popularity" and "upbeat" in tags:
+        return "밝고 신나는 분위기"
+    if primary_anchor == "upbeat_moment" and "summer" in tags:
+        return "여름 적합성"
+    if primary_anchor == "summer_travel" and "mainstream" in tags:
+        return "대중성"
+    return None
+
+
+def _dawn_sentimental_reason_ingredient(facts: object, role: dict[str, str]) -> dict[str, str] | None:
+    """Keep late-night copy anchored to one verified mood feature per track."""
+    if not isinstance(facts, dict):
+        return None
+
+    tags = {str(tag).strip().lower() for tag in facts.get("tags", []) if str(tag).strip()}
+    moods = {str(mood).strip().lower() for mood in facts.get("moods", []) if str(mood).strip()}
+    role_focus = role.get("focus", "")
+    if {"piano", "instrumental"}.issubset(tags):
+        feature = "피아노 중심의 연주"
+        source = "piano_instrumental"
+    elif {"shoegaze", "dream-pop"}.issubset(tags):
+        feature = "드림 팝·슈게이즈 계열의 분위기"
+        source = "shoegaze_dream_pop"
+    elif {"rnb", "soul"}.issubset(tags):
+        feature = "R&B/Soul 계열의 분위기"
+        source = "rnb_soul"
+    elif {"soft", "emotional"}.issubset(tags):
+        feature = "부드럽고 감성적인 분위기"
+        source = "soft_emotional"
+    elif "soft" in tags:
+        feature = "부드러운 분위기"
+        source = "soft"
+    elif "calm" in tags and role_focus == "혼자 생각에 머물기":
+        feature = "차분한 분위기"
+        source = "calm"
+    elif "ambient" in tags:
+        feature = "앰비언트 분위기"
+        source = "ambient"
+    elif "dreamy" in tags:
+        feature = "몽환적인 분위기"
+        source = "dreamy"
+    elif "emotional" in tags:
+        feature = "감성적인 분위기"
+        source = "emotional"
+    else:
+        return None
+
+    secondary_feature = None
+    if source == "rnb_soul" and "calm" in moods:
+        secondary_feature = "차분한 분위기"
+    elif source in {"dreamy", "calm"} and moods & {"sad", "lonely"}:
+        secondary_feature = "사색적인 감정"
+    elif source in {"emotional", "soft_emotional"} and "soft" in tags:
+        secondary_feature = "부드러운 분위기"
+    return {
+        "primary_feature": feature,
+        "feature_source": source,
+        "secondary_feature": secondary_feature,
+        "feature_provenance": "track_metadata",
+        "recommendation_role": role.get("focus", ""),
+    }
 
 
 def _build_music_feature_summary(facts: object) -> str | None:
@@ -292,7 +497,7 @@ def _build_music_feature_summary(facts: object) -> str | None:
         (("dreamy", "calm"), "몽환적이고 차분하게 가라앉는 분위기"),
         (("soft", "warm"), "부드럽고 따뜻하게 이어지는 분위기"),
         (("comfort", "calm"), "편안하면서 차분한 분위기"),
-        (("emotional", "soft"), "감정적이지만 부드럽게 이어지는 분위기"),
+        (("emotional", "soft"), "감성적이면서 부드럽게 이어지는 분위기"),
         (("rnb", "soul"), "차분한 소울·R&B 분위기"),
         (("upbeat", "high_energy"), "밝고 활기찬 분위기"),
     )
@@ -306,22 +511,60 @@ def _build_music_feature_summary(facts: object) -> str | None:
     return " · ".join(sorted(labels)[:2])
 
 
+def _normalize_selected_vibes(selected_vibes: list[str] | None) -> list[str]:
+    """Keep requested moods separate from verified track features in copy input."""
+    vibe_map = {
+        "몽환적인": "dreamy",
+        "감성적인": "emotional",
+        "잔잔한": "calm",
+        "차분한": "calm",
+        "따뜻한": "warm",
+        "신나는": "upbeat",
+        "몰입되는": "focused",
+        "위로되는": "comfort",
+        "강렬한": "high_energy",
+        "기분 전환되는": "upbeat",
+    }
+    return list(dict.fromkeys(vibe_map.get(vibe, vibe) for vibe in selected_vibes or []))
+
+
 def _recommendation_role(
     mood: str,
     index: int,
     context_text: str | None = None,
     selected_vibes: list[str] | None = None,
+    reason_facts: object | None = None,
 ) -> dict[str, str]:
     request_context = _build_listening_request_context(context_text, selected_vibes)
     has_study_flow = bool(request_context["context"]) and bool(request_context["current_state"])
     is_sleep_context = request_context["context"] == "수면 준비"
-    roles = (
-        _SLEEP_ROLES
-        if is_sleep_context
-        else _STUDY_FLOW_ROLES
-        if has_study_flow
-        else _RECOMMENDATION_ROLES.get(mood, _RECOMMENDATION_ROLES["focused"])
-    )
+    is_family_trip_context = request_context["context"] == "가족 여행의 차 안"
+    is_korean_rock_context = request_context["context"] == "국내 밴드 록 감정 전환"
+    is_dawn_sentimental_context = request_context["context"] == "새벽 감성 플레이리스트"
+    if is_sleep_context:
+        raw_tags = reason_facts.get("tags", []) if isinstance(reason_facts, dict) else []
+        tags = {str(tag).strip().lower() for tag in raw_tags if str(tag).strip()}
+        # Keep all sleep roles distinct while using verified tags to choose the
+        # most natural role order for each track's musical character.
+        if {"ambient", "dreamy"}.issubset(tags):
+            role_order = (1, 5, 4, 0, 3, 2)
+        elif {"classical", "piano"}.issubset(tags):
+            role_order = (0, 2, 3, 4, 5, 1)
+        elif {"jazz", "standard"}.issubset(tags):
+            role_order = (4, 0, 3, 1, 5, 2)
+        else:
+            role_order = tuple(range(len(_SLEEP_ROLES)))
+        roles = [_SLEEP_ROLES[role_index] for role_index in role_order]
+    elif is_family_trip_context:
+        roles = _FAMILY_TRIP_ROLES
+    elif is_korean_rock_context:
+        roles = _CATHARTIC_KOREAN_ROCK_ROLES
+    elif is_dawn_sentimental_context:
+        roles = _DAWN_SENTIMENTAL_ROLES
+    elif has_study_flow:
+        roles = _STUDY_FLOW_ROLES
+    else:
+        roles = _RECOMMENDATION_ROLES.get(mood, _RECOMMENDATION_ROLES["focused"])
     focus, situation_angle = roles[index % len(roles)]
     return {"focus": focus, "situation_angle": situation_angle}
 
@@ -397,8 +640,26 @@ def generate_recommendation_copy(
     if not is_gemini_configured() or not tracks:
         return None
 
+    request_context = _build_listening_request_context(context_text, selected_vibes)
+    is_family_trip = request_context["context"] == "가족 여행의 차 안"
+    is_dawn_sentimental = request_context["context"] == "새벽 감성 플레이리스트"
     track_lines = []
     for index, track in enumerate(tracks):
+        role = _recommendation_role(
+            mood,
+            index,
+            context_text,
+            selected_vibes,
+            track.get("reason_facts"),
+        )
+        ingredient = (
+            _family_trip_reason_ingredient(track.get("reason_facts"), role)
+            if is_family_trip
+            else _dawn_sentimental_reason_ingredient(track.get("reason_facts"), role)
+            if is_dawn_sentimental
+            else None
+        )
+        default_music_feature = _build_music_feature_summary(track.get("reason_facts"))
         track_lines.append(
             {
                 "track_id": str(track.get("track_id") or ""),
@@ -406,8 +667,15 @@ def generate_recommendation_copy(
                 "artist_name": str(track.get("artist_name") or ""),
                 "album_name": str(track.get("album_name") or ""),
                 "verified_reason_facts": _normalize_reason_facts(track.get("reason_facts")),
-                "music_feature": _build_music_feature_summary(track.get("reason_facts")),
-                "recommendation_role": _recommendation_role(mood, index, context_text, selected_vibes),
+                "track_actual_features": _normalize_reason_facts(track.get("reason_facts")),
+                "track_features_for_reason": _normalize_reason_facts(track.get("reason_facts")),
+                # Context-specific ingredients prevent a generic tag from
+                # dominating every reason in a playlist.
+                "music_feature": ingredient["primary_feature"] if ingredient else default_music_feature,
+                "recommendation_role": role,
+                "family_trip_reason_anchor": ingredient["feature_source"] if ingredient else None,
+                "dawn_sentimental_reason_anchor": ingredient["feature_source"] if is_dawn_sentimental and ingredient else None,
+                "reason_ingredient": ingredient,
             }
         )
 
@@ -420,12 +688,21 @@ def generate_recommendation_copy(
         "Write the message as a music recommendation service, not as a person beside the user. Never say phrases like '곁을 지켜줄게요', '곁에 있을게요', or '다독여줄게요'.\n"
         "The user_text field is only the user's direct free text. selected_vibes is a separate list of chosen vibe tags.\n"
         "listening_request_context is application-extracted planning data with current_state, goal, avoid, context, and priority. Follow its priority order when selected_vibes conflict.\n"
+        "mbti_aesthetic is an optional user-provided aesthetic shorthand, not a personality diagnosis or a factual preference. It is a soft tie-breaker only: never let it override explicit user requests, hard constraints, selected moods, or listening context. Never mention an MBTI type in the summary or reasons.\n"
+        "For summaries, prioritize the user's direct situation and selected moods before listening context and MBTI aesthetics. If the user selected dreamy and emotional, keep both ideas represented naturally; do not replace emotional with an MBTI-derived word such as introspective or sentimental. Do not use two overlapping action verbs such as '잠겨 머물기'.\n"
         "Treat explicit limits such as 'too noisy', 'distracting', 'not too much', or 'too stimulating' as hard constraints. For studying, prefer maintaining the current flow and moderate energy over merely saying a track is exciting.\n"
         "When relevant, connect each reason to one distinct goal or avoid condition, such as keeping a study flow, adding modest energy, avoiding excessive stimulation, or preventing a sluggish mood. Do not repeat the same condition for all tracks.\n"
+        "For family-trip car requests, preserve the supplied family/travel context in every reason. Use a different role for each track: departure excitement, keeping the car lively, easy shared listening, refreshing a long drive, a seasonal travel mood, or carrying the anticipation toward the destination. Do not reuse study, work, focus, or rest contexts.\n"
+        "For a family-trip summary, describe the future trip plainly in two sentences: the service selected bright songs for tomorrow's family trip, then mention summer travel and listening together in the car. Do not say the songs will add to excitement, fill time, complete a mood, or invite the user to enjoy them.\n"
+        "For a family-trip playlist, reason_ingredient is code-selected verified planning data. Sentence 1 must use its primary_feature. Use secondary_feature only when present and only to distinguish a repeated primary feature; never make an attribute list or noun chain. Its recommendation_role is for sentence 2 only. shared_familiarity may be described conservatively as '여러 사람이 비교적 익숙하게 들을 수 있는 대중적인 곡'; cross_generational_familiarity as familiarity across generations; mainstream_popularity only as '대중적으로 익숙한 편인 곡'; summer_travel as a summer-compatible mood; family_travel as a family-trip fit; upbeat_moment as a bright or lively moment. Do not force every song to be described as a cross-generational classic. Mention broad familiarity only for its supplied feature source. Do not use upbeat_moment for more than two tracks, and never write '경쾌한 에너지' or create raw metadata combinations such as '높은 에너지가 펼쳐져요'.\n"
+        "For every family-trip reason, use this exact separation: sentence 1 describes only the track's verified music_feature or family_trip_reason_anchor and ends with a period. Sentence 2 describes only the user's future travel listening moment through recommendation_role. Never join these clauses with a comma, '이어져', '-면서', or a relative modifier. For example, write '밝고 신나는 분위기가 느껴지는 곡이에요. 이동이 길어질 때 분위기를 가볍게 바꾸고 싶다면 잘 어울려요.' Do not write '밝고 신나는 분위기가 이어져 이동 중...' or '높은 에너지가 느껴지는 여름 여행 기분'.\n"
+        "Do not use recommendation_role itself as the first sentence. Also compare the two family-trip sentences before returning: if both describe the same idea such as travel excitement, keeping the car bright, or a summer mood, rewrite sentence 1 with the supplied primary feature instead.\n"
+        "In family-trip reasons, do not reuse energy as the default first-sentence feature. Distribute the six verified anchors across shared familiarity, family travel fit, summer travel fit, and at most two upbeat moments. The second sentence must not explain metadata; it must only explain the distinct travel role.\n"
         "If verified metadata says high energy while the user wants less stimulation, do not claim that the track is not stimulating. Describe it only as a fit for a brief refresh or a moment when the user wants to raise the tempo.\n"
         "Do not say that music 'helps immersion' or 'helps concentration'. In the summary, describe only the listening context, such as '공부 흐름을 이어가면서 과하지 않은 활기를 더하기 좋은 음악들이에요'.\n"
         "Do not claim that music prevents distraction, maintains concentration, or improves study efficiency. Use listening-context wording such as '현재 공부 흐름을 이어가면서 듣기 좋아요' or '강한 자극보다 일정한 분위기로 이어 듣고 싶을 때 어울려요'.\n"
         "When user_text contains a concrete life context such as job searching, an interview, a breakup, or exhaustion, name that context naturally in message.\n"
+        "Keep the user's timeline accurate. Words such as '어제', '어젯밤', and '지난밤' describe a past cause, not the current time. If the user says they want to rest now, describe the current context as '지금 잠시 쉬려는 상황', never as if it is currently night unless the user explicitly says so.\n"
         "For job-search anxiety, acknowledge the pressure or uncertainty of the job search and focus on settling the mind or regaining a steady pace.\n"
         "Do not describe anxiety as needing speed, driving rhythm, or productivity unless the user explicitly asks for focus, work tempo, or energy.\n"
         "Do not repeat the literal label '원하는 분위기' in the output.\n"
@@ -433,8 +710,15 @@ def generate_recommendation_copy(
         "Paraphrase the user's intent instead of copying the exact sentence.\n"
         "track_reasons should be an array with the same length as the tracks list.\n"
         "Each track_reason item must be an object with track_id, reason, and used_fact_keys.\n"
-        "Each reason should usually be 2 natural Korean sentences, specific to the track, and should reflect the user's text. Aim for 2-3 readable lines, not a strict character count.\n"
+        "Each reason must contain exactly 2 natural Korean sentences, specific to the track, and should reflect the user's text. Do not use semicolons, line fragments, or a single long sentence in place of this structure.\n"
         "music_feature is an application-normalized phrase based only on verified metadata. Use it as the musical feature instead of listing individual tags.\n"
+        "When sleep_ranking_factors is provided, it contains the verified tags/moods that raised this track in the sleep ranking. Use one relevant factor naturally in the first sentence, not as an internal label or a raw list.\n"
+        "For sleep/rest requests, instrumental or jazz alone is never evidence of low stimulation. Describe calmness, ambient, piano, dreamy, or classical qualities only when those facts are supplied. Do not claim low energy, a soft rhythm, or a lack of stimulation unless verified_reason_facts supports it.\n"
+        "For sleep/rest requests, do not use the same 'calm instrumental, good for sleep' logic for every track. Let the verified music_feature and the internal recommendation_role form one connected reason: piano can support unwinding or gently organizing remaining thoughts, ambient/dreamy can support slowing racing thoughts or shifting into rest, and calm jazz can support taking a little distance from crowded thoughts only when those facts are supplied.\n"
+        "Across the six sleep reasons, vary the second-sentence situation. Do not mechanically repeat '차분한 분위기', '조용히', '잠들기 전', '잠자리를 준비', or '듣기 좋아요'. Never promise that music will make the user sleep or resolve their emotions; describe a fitting listening moment instead.\n"
+        "Unless the user explicitly says the current time is night or bedtime, keep sleep/rest reasons time-neutral. Never infer '밤에', '하루의 끝에', '잠들기 전', or '오늘 하루를 마무리하며' from sleep alone. When the user mentions a past night but wants to rest now, use phrases such as '잠시 눈을 감고 쉬고 싶을 때', '편안하게 눈을 붙이고 싶을 때', or '잠시 휴식하는 분위기로 전환하고 싶을 때'.\n"
+        "Use only verified metadata and do not expand soft/calm into claims such as '자극이 없다', '집중을 방해하지 않는다', or '잠을 유도한다'. Avoid abstract agentic subjects such as '구성이 분위기를 이끈다' or '특징이 감성을 만든다'; write direct descriptions such as '조용한 분위기의 연주가 자연스럽게 이어지는 곡이에요'.\n"
+        "Do not use '자극 없이', '~가 담긴', or '~가 만들어줘요' in track reasons. They either overstate the metadata or sound like a data description. For example, write '부드러운 피아노 선율이 잔잔하게 이어지는 연주곡이에요' instead of '부드러운 피아노 연주가 담긴 클래식 곡이에요'.\n"
         "For every track, connect music_feature to a listening context in the first sentence, then naturally connect that context to the role's situation_angle in the second sentence.\n"
         "Use a different recommendation_role for each track, but never expose its focus label verbatim. The second sentences must not repeat and must use distinct role logic, not just synonyms for calming down.\n"
         "Preserve Korean particles and connectors: do not write compressed fragments such as '숨 고르기 어울려요', '정리하기 잘 맞아요', or '시간 만들기 좋아요'.\n"
@@ -449,10 +733,20 @@ def generate_recommendation_copy(
         "Before returning each reason, remove nearby repeated descriptors with the same root. For example, do not use '부드럽고 ... 부드러운' or '차분한 ... 차분하게' in one sentence.\n"
         "Also avoid repeating '듣기 좋', '조용', '차분', '편안', '조급', or '초조' across the two sentences of one reason.\n"
         "Do not use two '~때' clauses in one sentence. Combine them naturally, for example: '결과에 대한 생각이 계속 머릿속을 맴돌 때, 잠시 생각의 속도를 늦추며 듣기 좋아요.'\n"
+        "Also avoid mixed duplicate condition forms such as '~하면 ... ~할 때' or '~할 때 ... ~하고 싶을 때'. Use one clear condition, for example: '여러 생각이 한꺼번에 떠오를 때, 잠시 다른 흐름에 마음을 두고 쉬어가고 싶다면 잘 어울려요.'\n"
         "Do not connect a purpose infinitive to an evaluation as in '~하기 위해 듣기 좋아요'. Write '잠시 긴장을 내려놓으며 듣기 좋아요' or '~고 싶을 때 잘 어울려요' instead.\n"
         "When using verbs such as '정리하며' or '가라앉히며', name what is being handled. For example, write '복잡한 마음을 천천히 정리하며 듣기 좋습니다', not just '차분히 정리하며 듣기 좋습니다'.\n"
         "Do not state that music resolves or gives comfort to the user, such as '위로를 받을 수 있어요'. Prefer a listening context like '조용히 쉬어가고 싶은 순간에 잘 어울려요'.\n"
         "The first sentence must be different for every track. Use each track's supplied music_feature rather than copying another track's opening.\n"
+        "For family-trip copy, do a final lexical check: never repeat a nearby word such as '기분을 기분 좋게', '밝은 분위기를 밝게', or '이어지는 ... 이어가고'. Do not use '곁들이기 좋아요' more than once across the six reasons. Spread natural endings such as '듣기 좋아요', '잘 맞아요', and '함께 즐기기 좋아요'; do not end every reason with '잘 어울려요'.\n"
+        "For a dawn-sentimental request, interpret words such as '새벽', '센치', and 'INFP 감성' as a late-night, introspective aesthetic. Do not infer a personality trait or claim that a personality type prefers a genre. This request seeks emotional congruence, not recovery: never use study, work, tasks, focus, productivity, rest, healing, tension relief, or mood-improvement roles. Keep the late-night context even if the current clock is not dawn. Prefer dreamy, emotional, soft, calm, ambient, or R&B/Soul facts only when supplied.\n"
+        "For every dawn-sentimental reason, keep two sentences: first only verified track traits, then a distinct role such as lingering in the dawn mood, following a sentimental feeling, or staying with a lingering thought. Do not use '잠시 쉬어가며 듣기 좋아요' in this context. Translate emotional metadata naturally as '감성적인', '여운이 있는', or '차분한' only when verified; never write the unnatural phrase '감정적인 분위기이'.\n"
+        "For a dawn-sentimental playlist, reason_ingredient is code-selected verified planning data. Sentence 1 must use its primary_feature as a natural track description. When its secondary_feature is present, combine it only when the two form one natural phrase; never make an attribute list. Sentence 2 must use recommendation_role only as the user's late-night listening moment, never as study, work, recovery, or rest advice.\n"
+        "user_desired_moods is a ranking preference, and track_actual_features is factual metadata for one track. Never copy a desired mood into sentence 1 unless that same trait appears in track_actual_features. MBTI aesthetic data is preference-only, never a track fact. Across a late-night playlist, distribute verified features such as R&B/Soul, dream pop/shoegaze, piano/instrumental, ambient, soft, calm, emotional, or dreamy when supplied; do not describe every track as dreamy or quiet.\n"
+        "Avoid vague filler such as '감성적으로 다가와요', '은은하게 번져요', '포근하게 이어져요', '마음에 스며들어요', '깊은 결', or '감정의 온도' when a verified genre, mood, or instrumentation can be stated instead. For a verified genre, describe the genre directly and do not soften it with unsupported adjectives.\n"
+        "For family-trip familiarity claims, match the supplied feature_source exactly: mainstream_popularity means only '대중적인 곡' or '많은 사람에게 알려진 편인 곡'; shared_familiarity may say '여러 사람이 비교적 익숙하게 들을 수 있는 대중적인 곡'; only cross_generational_familiarity may say '세대가 달라도 비교적 익숙하게 느낄 수 있는 곡'. Never turn these into an analysis report such as '대중성이 돋보여요', and never combine familiarity with mood as '친숙한 분위기' or '대중성 높은 분위기'.\n"
+        "Avoid unnatural family-trip collocations including '기분을 더하다', '분위기가 골고루 담겨 있다', and '대중성이 돋보이다'. For an upbeat feature, write a direct phrase such as '밝고 활기찬 분위기가 또렷한 곡이에요.' Keep the feature sentence and the travel-role sentence separate.\n"
+        "Before returning family-trip copy, check Korean noun modifiers: write '밝은 분위기의 곡' rather than '밝은 분위기 곡'. Never write malformed compounds such as '분위기 곡', '에너지 곡', or '대중성 곡'. If two upbeat tracks occur in one playlist, keep their first sentences meaningfully distinct: one may use '밝고 신나는 분위기', while another may use '흥겹고 활기찬 분위기'.\n"
         "Before returning, compare the two sentences and remove a repeated core idea. For example, if the first sentence says the study flow should not change, the second must not repeat that same study-flow idea; use a distinct role such as a light refresh instead.\n"
         "Do not use abstract or mechanical phrases such as '에너지가 채워지는 느낌', '~할 때 적당해요', '~하기 알맞아요', or '분위기가 다가와요'.\n"
         "Also avoid '에너지가 분위기를 채워준다', '템포를 살려준다', '에너지가 조화롭게 흘러간다', '분위기를 조화롭게 만든다', and '~할 때 유용하다'. Use direct everyday Korean such as '밝고 경쾌한 분위기가 가볍게 이어지는 곡이에요' or '~하고 싶을 때 잘 어울려요'.\n"
@@ -462,9 +756,12 @@ def generate_recommendation_copy(
         "Never add arrangement, progression, vocals, rhythm, instruments, lyrics, BPM, or production details unless they appear in verified_reason_facts. With only soft/warm-style metadata, describe only the supplied atmosphere naturally.\n"
         "Keep a natural sentence even if another track uses a similar safe expression; do not force awkward variation.\n"
         "The message is a recommendation summary, not an instruction. Do not tell the user to do something with endings like '보세요', '쉬어가세요', or '들어보세요'. Say that the service selected songs instead.\n"
+        "Use conversational Korean haeyo체 throughout every track reason: prefer '곡이에요', '잘 맞아요', and '듣기 좋아요'. Do not mix in formal endings such as '곡입니다', '좋습니다', '어울립니다', or '합니다'.\n"
+        "The summary must describe the selected songs, not instruct the user. Never end it with '들어보세요', '즐겨보세요', '채워보세요', '만끽해 보세요', or '느껴보세요'.\n"
+        "Do not say the music soothes the user's body or mind, such as '몸과 마음을 달래며'. Describe only the current rest context and the songs selected for it.\n"
         "In the summary, do not use overlapping anxiety words such as '초조' and '조급' together; choose one clear expression.\n"
         "Use only verified_reason_facts as factual grounding for musical claims.\n"
-        "used_fact_keys must list the verified_reason_facts keys used in that reason, using only sound_profile, listening_effect, tags, or moods.\n"
+        "used_fact_keys must list the verified_reason_facts keys used in that reason, using only sound_profile, listening_effect, tags, moods, or sleep_ranking_factors.\n"
         "Every reason must have exactly two sentences: (1) a verified musical feature, then (2) its listening benefit connected to the user's situation.\n"
         "If music_feature is missing, do not invent a musical feature. Keep that item's reason empty and used_fact_keys empty so the application can use its safe fallback template.\n"
         "Never expose internal metadata words such as tag, seed, seed genre, selection seed, or service classification.\n"
@@ -485,6 +782,13 @@ def generate_recommendation_copy(
         "selected_mood": mood,
         "user_text": context_text or "",
         "selected_vibes": selected_vibes or [],
+        "user_desired_moods": _normalize_selected_vibes(selected_vibes),
+        "user_preferences_for_context": {
+            "selected_mood": mood,
+            "desired_moods": _normalize_selected_vibes(selected_vibes),
+            "listening_context": request_context["context"],
+        },
+        "mbti_aesthetic_for_ranking": request_context.get("mbti_aesthetic"),
         "listening_request_context": _build_listening_request_context(context_text, selected_vibes),
         "retrieved_guidance": rag_guidance or {},
         "tracks": track_lines,
@@ -527,7 +831,7 @@ def generate_recommendation_copy(
         used_fact_keys = item.get("used_fact_keys") or []
         if not isinstance(used_fact_keys, list):
             used_fact_keys = []
-        valid_fact_keys = {"sound_profile", "listening_effect", "tags", "moods"}
+        valid_fact_keys = {"sound_profile", "listening_effect", "tags", "moods", "sleep_ranking_factors"}
         used_fact_keys = [str(key) for key in used_fact_keys if str(key) in valid_fact_keys]
         if track_id and reason and used_fact_keys:
             normalized_reasons.append({"track_id": track_id, "reason": reason, "used_fact_keys": used_fact_keys})
