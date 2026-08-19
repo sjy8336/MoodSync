@@ -120,9 +120,42 @@ export function logoutDemoSession() {
 }
 
 export function recommendMood(payload) {
+    console.info('[Mood Sync] Gemini 추천 요청 시작', {
+        mood: payload?.mood || null,
+        hasText: Boolean(payload?.text),
+    });
+
     return request(ENDPOINTS.moodRecommend, {
         method: 'POST',
         body: JSON.stringify(payload),
+    }).then((result) => {
+        const profile = result?.recommendation?.generation_profile || {};
+        const status = {
+            attempted: profile.gemini_copy_attempted ?? null,
+            succeeded: profile.gemini_copy_succeeded ?? null,
+            reasonCount: profile.gemini_reason_count ?? null,
+            reasonSource: profile.reason_source ?? null,
+            hasRagContext: profile.has_rag_context ?? null,
+            error: profile.gemini_copy_error ?? null,
+            pending: profile.gemini_copy_pending ?? false,
+        };
+
+        if (status.pending) {
+            console.info('[Mood Sync] fallback 결과를 먼저 표시하고 Gemini 이유를 생성 중입니다', status);
+        } else if (status.succeeded && status.reasonSource === 'gemini') {
+            console.info('[Mood Sync] Gemini 추천 이유 생성 성공', status);
+        } else if (status.attempted) {
+            console.warn('[Mood Sync] Gemini 호출은 되었지만 fallback 이유를 사용합니다', status);
+            if (status.error) {
+                console.error('[Mood Sync] Gemini fallback 원인:', status.error);
+            }
+        } else {
+            console.warn('[Mood Sync] Gemini 추천 이유가 실행되지 않았습니다', status);
+        }
+        return result;
+    }).catch((error) => {
+        console.error('[Mood Sync] 추천 요청 실패', error);
+        throw error;
     });
 }
 

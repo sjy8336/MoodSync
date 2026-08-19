@@ -29,7 +29,10 @@ class Settings:
         self.openai_model: str = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
         self.openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
         self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
-        self.gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+        self.gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+        # Recommendation copy is a short structured-response task. Keep it on
+        # a low-latency model instead of competing with heavier reasoning work.
+        self.gemini_copy_model: str = os.getenv("GEMINI_COPY_MODEL", "gemini-3.5-flash-lite")
         self.gemini_base_url: str = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
         self.gemini_embedding_model: str = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
         frontend_origin = self.frontend_url

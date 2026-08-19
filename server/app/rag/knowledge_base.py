@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from functools import lru_cache
 from math import sqrt
+from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -42,7 +44,93 @@ def _prepare_document_text(chunk: KnowledgeChunk) -> str:
     return f"title: {title} | text: {chunk.content.strip()} | keywords: {keywords}"
 
 
-def _gemini_embed_text(text: str) -> list[float]:
+_EMBEDDING_CACHE_PATH = Path(__file__).resolve().parents[2] / ".cache" / "rag_document_embeddings.json"
+
+
+def _document_cache_key() -> str:
+    documents = "\n".join(f"{chunk.id}:{_prepare_document_text(chunk)}" for chunk in _knowledge_base())
+    return hashlib.sha256(f"{settings.gemini_embedding_model}\n{documents}".encode("utf-8")).hexdigest()
+
+
+def _load_document_embedding_cache(cache_key: str) -> dict[str, list[float]]:
+    try:
+        cached = json.loads(_EMBEDDING_CACHE_PATH.read_text(encoding="utf-8"))
+        if cached.get("cache_key") != cache_key:
+            return {}
+        vectors = cached.get("vectors") or {}
+        return {
+            str(chunk_id): [float(value) for value in values]
+            for chunk_id, values in vectors.items()
+            if isinstance(values, list) and all(isinstance(value, (int, float)) for value in values)
+        }
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
+def _save_document_embedding_cache(cache_key: str, vectors: dict[str, list[float]]) -> None:
+    try:
+        _EMBEDDING_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _EMBEDDING_CACHE_PATH.write_text(
+            json.dumps({"cache_key": cache_key, "vectors": vectors}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+
+def build_recommendation_guidance(
+    retrieved: RetrievedKnowledge,
+    *,
+    mood: str,
+    selected_vibes: list[str],
+    user_text: str,
+) -> dict[str, Any]:
+    """Turn retrieved documents into a small, safe contract for recommendation steps."""
+    chunk_ids = {chunk.id for chunk in retrieved.chunks}
+    text = user_text.lower()
+    vibes = set(selected_vibes)
+    comfort_request = (
+        mood in {"anxious", "sad", "lonely", "tired"}
+        and bool(vibes & {"위로되는", "잔잔한", "따뜻한", "감성적인", "차분한"})
+    ) or any(word in text for word in ("헤어", "이별", "불안", "위로", "포근", "따뜻", "다독"))
+    focus_request = mood == "focused" or "몰입되는" in vibes or any(
+        word in text for word in ("공부", "작업", "집중", "과제", "마감")
+    )
+
+    guidance: dict[str, Any] = {
+        "source_chunk_ids": sorted(chunk_ids),
+        "selection_rules": [],
+        "copy_rules": [
+            "곡의 검증된 메타데이터만 음악적 근거로 사용한다.",
+            "사용자 상황과 연결하되, 곡 순번이나 일반적인 칭찬을 근거로 쓰지 않는다.",
+        ],
+        "preferred_tags": [],
+        "avoid_tags": [],
+        "audio_hints": {},
+    }
+
+    if comfort_request and {"comfort-mode", "comfort-breathing", "vibe-to-sound"} & chunk_ids:
+        guidance["selection_rules"].append("따뜻하고 부드러운 후보를 우선하며, 거칠거나 급격히 고조되는 후보는 제외한다.")
+        guidance["preferred_tags"] = ["soft", "warm", "calm", "comfort", "emotional", "love", "soul"]
+        guidance["avoid_tags"] = ["punk", "pop-punk", "rock", "high_energy", "driving"]
+        guidance["audio_hints"] = {
+            "target_energy": 0.32,
+            "target_acousticness": 0.7,
+            "target_valence": 0.5,
+        }
+
+    if focus_request and "focus-flow" in chunk_ids:
+        guidance["selection_rules"].append("리듬 변화가 과하지 않고 일정한 텐션을 유지하는 후보를 우선한다.")
+        guidance["preferred_tags"] = list(dict.fromkeys([*guidance["preferred_tags"], "focused", "rhythmic"]))
+        guidance["audio_hints"] = {**guidance["audio_hints"], "target_energy": 0.48}
+
+    if "genre-preservation" in chunk_ids:
+        guidance["selection_rules"].append("사용자가 직접 말한 장르 선호는 다른 일반 규칙보다 우선한다.")
+
+    return guidance
+
+
+def _gemini_embed_text(text: str, *, task_type: str) -> list[float]:
     if not settings.gemini_api_key:
         return []
 
@@ -55,6 +143,7 @@ def _gemini_embed_text(text: str) -> list[float]:
                 "content": {
                     "parts": [{"text": text}],
                 },
+                "taskType": task_type,
             }
         ).encode("utf-8"),
         headers={"Content-Type": "application/json"},
@@ -99,17 +188,25 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
 @lru_cache(maxsize=1)
 def _document_embeddings() -> tuple[tuple[KnowledgeChunk, tuple[float, ...]], ...]:
     vectors: list[tuple[KnowledgeChunk, tuple[float, ...]]] = []
+    cache_key = _document_cache_key()
+    cached_vectors = _load_document_embedding_cache(cache_key)
+    updated_vectors = dict(cached_vectors)
     for chunk in _knowledge_base():
-        vector = tuple(_gemini_embed_text(_prepare_document_text(chunk)))
+        vector = tuple(cached_vectors.get(chunk.id) or _gemini_embed_text(
+            _prepare_document_text(chunk), task_type="RETRIEVAL_DOCUMENT"
+        ))
         if vector:
             vectors.append((chunk, vector))
+            updated_vectors[chunk.id] = list(vector)
+    if updated_vectors != cached_vectors:
+        _save_document_embedding_cache(cache_key, updated_vectors)
     return tuple(vectors)
 
 
 @lru_cache(maxsize=128)
 def retrieve_recommendation_context(query: str, limit: int = 4) -> RetrievedKnowledge:
     normalized_query = " ".join(query.split())
-    query_vector = _gemini_embed_text(_prepare_query_text(normalized_query))
+    query_vector = _gemini_embed_text(_prepare_query_text(normalized_query), task_type="RETRIEVAL_QUERY")
     if query_vector:
         ranked = sorted(
             _document_embeddings(),
@@ -135,4 +232,3 @@ def retrieve_recommendation_context(query: str, limit: int = 4) -> RetrievedKnow
     )
     selected = tuple(chunk for chunk in ranked[:limit] if chunk.keywords)
     return RetrievedKnowledge(query=query, chunks=selected)
-

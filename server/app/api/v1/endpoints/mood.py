@@ -1,9 +1,9 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
-from app.graphs.recommendation_graph import build_mood_response, run_recommendation_workflow
+from app.graphs.recommendation_graph import build_mood_response, complete_recommendation_copy, run_recommendation_workflow
 from app.schemas.home import HomeSummaryResponse
 from app.schemas.mood import MoodRequest, MoodResponse
 from app.services.current_user import (
@@ -26,6 +26,7 @@ def recommend_by_mood(
     payload: MoodRequest,
     request: Request,
     response: Response,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> MoodResponse:
     user = resolve_current_spotify_user(request, db)
@@ -35,7 +36,11 @@ def recommend_by_mood(
         response=response,
         user=user,
         payload=payload,
+        defer_gemini_copy=True,
     )
+    recommendation = workflow_state.get("recommendation")
+    if recommendation is not None:
+        background_tasks.add_task(complete_recommendation_copy, recommendation.id)
     return build_mood_response(workflow_state)
 
 

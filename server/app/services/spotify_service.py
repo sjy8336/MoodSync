@@ -1,22 +1,45 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import re
+import time
 from functools import lru_cache
+from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from app.core.config import settings
 from app.schemas.track import TrackSummary
-from app.services.gemini_service import GeminiServiceError, generate_track_selection_profile
 
 
 SPOTIFY_API_BASE = "https://api.spotify.com/v1"
 SPOTIFY_AVAILABLE_GENRES_URL = f"{SPOTIFY_API_BASE}/recommendations/available-genre-seeds"
 SPOTIFY_RECOMMENDATIONS_URL = f"{SPOTIFY_API_BASE}/recommendations"
 SPOTIFY_SEARCH_URL = f"{SPOTIFY_API_BASE}/search"
+SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
 VIBE_PATTERN = re.compile(r"\s*원하는\s*분위기\s*:\s*([^.]*)\.?\s*$")
+
+_app_access_token: str | None = None
+_app_access_token_expires_at = 0.0
+
+# Spotify's track endpoint does not provide a reliable lyrics/vocals flag. These
+# phrases therefore route the request to catalog tracks with verified metadata.
+INSTRUMENTAL_REQUEST_TERMS = (
+    "가사가 없는",
+    "가사 없는",
+    "가사없이",
+    "가사 없이",
+    "무가사",
+    "연주곡",
+    "보컬 없는",
+    "보컬이 없는",
+    "instrumental only",
+    "instrumental",
+)
+SLEEP_REQUEST_TERMS = ("수면", "잠들", "잠을", "잠 못", "잠자", "자고 싶", "잘 때")
 
 GENRE_FAMILY_HINTS: list[tuple[tuple[str, ...], str, list[str], dict[str, object]]] = [
     (("rnb", "r&b", "알앤비"), "R&B", ["r&b", "r-n-b", "soul", "neo-soul"], {"target_valence": 0.5, "target_energy": 0.58}),
@@ -25,7 +48,7 @@ GENRE_FAMILY_HINTS: list[tuple[tuple[str, ...], str, list[str], dict[str, object
     (("funk", "펑키", "groove", "groovy"), "펑키", ["funk", "disco", "dance"], {"target_energy": 0.76, "target_danceability": 0.82}),
     (("disco", "디스코"), "디스코", ["disco", "funk", "dance"], {"target_energy": 0.8, "target_danceability": 0.86}),
     (("punk rock", "펑크락", "펑크"), "펑크락", ["punk", "rock", "alternative", "hard-rock"], {"target_energy": 0.88, "target_danceability": 0.7}),
-    (("rock", "록"), "록", ["rock", "alternative", "punk", "hard-rock"], {"target_energy": 0.82, "target_danceability": 0.58}),
+    (("rock", "록 음악", "록밴드", "락"), "록", ["rock", "alternative", "punk", "hard-rock"], {"target_energy": 0.82, "target_danceability": 0.58}),
     (("indie pop", "indie-pop", "인디팝"), "인디팝", ["indie", "pop", "alternative"], {"target_energy": 0.46, "target_acousticness": 0.46}),
     (("folk", "포크", "americana", "아메리카나", "bluegrass", "블루그래스"), "포크", ["folk", "acoustic", "americana"], {"target_energy": 0.28, "target_acousticness": 0.84}),
     (("hip hop", "hip-hop", "힙합", "랩", "rap", "trap"), "힙합", ["hip-hop", "rap", "trap", "chill"], {"target_energy": 0.74, "target_danceability": 0.72}),
@@ -146,6 +169,76 @@ TRACK_SOUND_HINTS: dict[tuple[str, str], tuple[str, str]] = {
 }
 
 
+def _canonical_track_token(value: str) -> str:
+    """Normalize Spotify display names before matching them to curated metadata."""
+    cleaned = re.sub(r"\s*[\[(].*?[\])]\s*", " ", value.lower())
+    cleaned = re.sub(r"\s+(?:feat\.?|ft\.?|featuring)\s+.*$", "", cleaned)
+    return " ".join(cleaned.split())
+
+
+TRACK_METADATA_ALIASES: dict[tuple[str, str], tuple[str, str]] = {
+    ("sleepless in seoul", "ph-1"): ("sleepless in ______", "ph-1"),
+}
+
+
+def _catalog_metadata_for_track(name: str, artist_name: str) -> dict[str, object]:
+    normalized_name = _canonical_track_token(name)
+    normalized_artist = _canonical_track_token(artist_name)
+    normalized_name, normalized_artist = TRACK_METADATA_ALIASES.get(
+        (normalized_name, normalized_artist),
+        (normalized_name, normalized_artist),
+    )
+    for candidate in FALLBACK_LIBRARY:
+        if (
+            _canonical_track_token(str(candidate.get("name") or "")) == normalized_name
+            and _canonical_track_token(str(candidate.get("artist_name") or "")) == normalized_artist
+        ):
+            return {
+                "tags": list(candidate.get("tags") or []),
+                "moods": list(candidate.get("moods") or []),
+            }
+    return {}
+
+
+def extract_hard_constraints(context_text: str | None) -> dict[str, bool]:
+    """Return only requirements that must be enforced before ranking tracks."""
+    lowered = (context_text or "").lower()
+    return {"instrumental_required": any(term in lowered for term in INSTRUMENTAL_REQUEST_TERMS)}
+
+
+def _is_sleep_request(context_text: str | None) -> bool:
+    lowered = (context_text or "").lower()
+    return any(term in lowered for term in SLEEP_REQUEST_TERMS)
+
+
+def is_verified_instrumental(track: TrackSummary) -> bool:
+    facts = track.reason_facts or {}
+    tags = facts.get("tags") if isinstance(facts, dict) else []
+    return isinstance(tags, list) and "instrumental" in {str(tag).lower() for tag in tags}
+
+
+def validate_hard_constraints(
+    tracks: list[TrackSummary],
+    context_text: str | None,
+) -> list[TrackSummary]:
+    """Discard unknown candidates rather than guessing that they meet a hard request."""
+    constraints = extract_hard_constraints(context_text)
+    if constraints["instrumental_required"]:
+        return [track for track in tracks if is_verified_instrumental(track)]
+    return tracks
+
+
+def _build_reason_facts(name: str, artist_name: str, seed_genres: list[str] | None = None) -> dict[str, object]:
+    facts = _catalog_metadata_for_track(name, artist_name)
+    sound_hint = TRACK_SOUND_HINTS.get((name.strip().lower(), artist_name.strip().lower()))
+    if sound_hint:
+        facts["sound_profile"] = sound_hint[0]
+        facts["listening_effect"] = sound_hint[1]
+    if seed_genres:
+        facts["selection_seed_genres"] = list(seed_genres)
+    return facts
+
+
 MOOD_PROFILES: dict[str, dict[str, object]] = {
     "happy": {
         "genres": ["pop", "dance", "party", "funk"],
@@ -235,6 +328,10 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "Someone Like You", "artist_name": "Adele", "moods": ["sad", "lonely"], "tags": ["emotional", "soft"]},
     {"name": "Fix You", "artist_name": "Coldplay", "moods": ["sad", "anxious"], "tags": ["soft", "emotional"]},
     {"name": "To Build a Home", "artist_name": "The Cinematic Orchestra", "moods": ["sad", "lonely"], "tags": ["soft", "dreamy"]},
+    {"name": "Love Poem", "artist_name": "IU", "moods": ["sad", "lonely", "anxious"], "tags": ["korean", "soft", "emotional", "comfort"]},
+    {"name": "Through the Night", "artist_name": "IU", "moods": ["sad", "lonely", "anxious", "calm"], "tags": ["korean", "soft", "calm", "comfort"]},
+    {"name": "Best Part", "artist_name": "Daniel Caesar feat. H.E.R.", "moods": ["sad", "lonely", "anxious", "calm"], "tags": ["rnb", "soul", "soft", "warm", "love"]},
+    {"name": "Like I'm Gonna Lose You", "artist_name": "Meghan Trainor feat. John Legend", "moods": ["sad", "lonely", "anxious"], "tags": ["pop", "soft", "emotional", "warm", "love"]},
     {"name": "Ditto", "artist_name": "NewJeans", "moods": ["lonely", "calm", "anxious"], "tags": ["korean", "dreamy"]},
     {"name": "Hype Boy", "artist_name": "NewJeans", "moods": ["excited", "happy", "focused"], "tags": ["korean", "upbeat"]},
     {"name": "Super Shy", "artist_name": "NewJeans", "moods": ["excited", "anxious", "focused"], "tags": ["korean", "high_energy"]},
@@ -304,6 +401,42 @@ def _spotify_request(url: str, access_token: str, params: dict[str, object] | No
         raise SpotifyRecommendationError(f"Spotify recommendation request failed: {error_body or exc.reason}") from exc
     except URLError as exc:
         raise SpotifyRecommendationError(f"Spotify recommendation request failed: {exc.reason}") from exc
+
+
+def _get_app_access_token() -> str | None:
+    """Use the app token only to enrich verified fallback tracks with album art."""
+    global _app_access_token, _app_access_token_expires_at
+
+    if _app_access_token and time.time() < _app_access_token_expires_at:
+        return _app_access_token
+    if not settings.spotify_client_id or not settings.spotify_client_secret:
+        return None
+
+    credentials = base64.b64encode(
+        f"{settings.spotify_client_id}:{settings.spotify_client_secret}".encode("utf-8")
+    ).decode("ascii")
+    request = Request(
+        SPOTIFY_TOKEN_URL,
+        data=urlencode({"grant_type": "client_credentials"}).encode("utf-8"),
+        headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=4) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+        return None
+
+    access_token = payload.get("access_token") if isinstance(payload, dict) else None
+    if not isinstance(access_token, str) or not access_token:
+        return None
+    expires_in = payload.get("expires_in") if isinstance(payload, dict) else 3600
+    _app_access_token = access_token
+    _app_access_token_expires_at = time.time() + max(60, int(expires_in) - 60)
+    return _app_access_token
 
 
 @lru_cache(maxsize=1)
@@ -471,6 +604,7 @@ def _map_track(track: dict, mood_label: str, seed_genres: list[str]) -> TrackSum
         spotify_url=spotify_url,
         preview_url=track.get("preview_url"),
         duration_ms=duration_ms if isinstance(duration_ms, int) else None,
+        reason_facts=_build_reason_facts(str(track.get("name") or "Unknown Track"), str(primary_artist), seed_genres),
         reason=reason,
     )
 
@@ -511,6 +645,53 @@ def _context_intent(context_text: str | None) -> str:
     if any(token in lowered for token in ("fast", "quick", "speed")) or "빠르게" in context_text or "빨리" in context_text:
         return "빠른 템포를 유지"
     return ""
+
+
+def _reason_situation(mood: str, context_text: str | None) -> str:
+    raw_text = context_text or ""
+    lowered = raw_text.lower()
+    if any(token in raw_text or token in lowered for token in ("취업", "입사", "면접", "지원서", "자소서", "이력서")):
+        return "취업 준비가 마음처럼 풀리지 않아 초조한 지금"
+    if _context_requests_comfort(context_text):
+        return "불안한 마음을 가라앉히고 위로받고 싶은 지금 상황"
+    if context_text and any(token in context_text for token in ("졸려", "피곤", "처져", "늘어")):
+        return "처진 집중력을 다시 끌어올리고 싶은 순간"
+    if context_text and any(token in context_text for token in ("공부", "작업", "과제", "마감", "집중", "몰입")):
+        return "집중을 오래 이어가고 싶은 상황"
+    return "지금의 감정과 원하는 분위기"
+
+
+def _recommendation_need(context_text: str | None) -> str:
+    raw_text = context_text or ""
+    lowered = raw_text.lower()
+    if any(token in raw_text or token in lowered for token in ("취업", "입사", "면접", "지원서", "자소서", "이력서")):
+        return "마음처럼 진전되지 않는 취업 준비 때문에 쌓인 불안"
+    if _context_requests_comfort(context_text):
+        return "마음을 다독이고 위로받고 싶은 지금의 불안"
+    return "지금 느끼는 감정"
+
+
+def _connect_effect_to_situation(effect: str, situation: str) -> str:
+    trimmed = effect.rstrip(".")
+    endings = {
+        "좋아요": "좋아",
+        "좋습니다": "좋아",
+        "도와줘요": "도와줘",
+        "선택이에요": "선택이라",
+    }
+    for ending, replacement in endings.items():
+        if trimmed.endswith(ending):
+            trimmed = f"{trimmed[: -len(ending)]}{replacement}"
+            break
+    return f"{trimmed}, {situation}에 특히 추천해요."
+
+
+def _connect_classification_effect(effect: str, situation: str) -> str:
+    trimmed = effect.rstrip(".")
+    for ending, replacement in (("만들어줘요", "만들어줘서"), ("더해줘요", "더해줘서"), ("도움을 줘요", "도움을 줘서"), ("좋아요", "좋아서")):
+        if trimmed.endswith(ending):
+            return f"{trimmed[: -len(ending)]}{replacement} {situation}에 맞춰 골랐어요."
+    return f"{trimmed} 덕분에 {situation}에 맞춰 골랐어요."
 
 
 def _split_context(raw_text: str | None) -> tuple[str, list[str]]:
@@ -582,7 +763,16 @@ def _context_prefers_punk_rock(context_text: str | None) -> bool:
     if not context_text or not isinstance(context_text, str):
         return False
     lowered = context_text.lower()
-    return any(token in context_text or token in lowered for token in ("펑크락", "punk rock", "punk", "펑크", "록"))
+    return any(token in context_text or token in lowered for token in ("펑크락", "punk rock", "punk", "펑크"))
+
+
+def _context_requests_comfort(context_text: str | None) -> bool:
+    if not context_text or not isinstance(context_text, str):
+        return False
+
+    lowered = context_text.lower()
+    comfort_words = ("위로", "따뜻", "포근", "잔잔", "감성", "사랑 노래", "이별", "헤어", "다독")
+    return sum(word in context_text or word in lowered for word in comfort_words) >= 2
 
 
 def _build_contextual_search_terms(context_text: str | None) -> list[str]:
@@ -665,6 +855,16 @@ def build_recommendation_message(
     context = _build_context_summary(context_text)
     korean_rnb_request = _context_prefers_korean_rnb(context_text)
     punk_request = _context_prefers_punk_rock(context_text)
+    comfort_request = _context_requests_comfort(context_text)
+    job_search_request = any(
+        token in (context_text or "").lower()
+        for token in ("취업", "입사", "면접", "지원서", "자소서", "이력서")
+    )
+    study_flow_request = any(token in (context_text or "").lower() for token in ("공부", "과제", "작업", "집중", "몰입"))
+    avoids_overstimulation = any(token in (context_text or "").lower() for token in ("소란", "시끄", "방해", "과하지", "너무 강", "자극"))
+    sleep_request = _is_sleep_request(context_text)
+    constraints = extract_hard_constraints(context_text)
+    verified_instrumental_only = bool(tracks) and all(is_verified_instrumental(track) for track in tracks)
     free_excerpt = _excerpt(str(context["free_text"]) if context["free_text"] else "", 46)
     vibe_text = str(context["vibe_phrase"])
     style_text = str(context["style"])
@@ -673,6 +873,21 @@ def build_recommendation_message(
     tags = context.get("tags") or []
     track_signature = "|".join(track.track_id for track in (tracks or [])[:3])
     base_seed = f"{normalized_mood}|{context_text or ''}|{track_count}|{track_signature}"
+
+    if study_flow_request and avoids_overstimulation:
+        return "지금의 좋은 집중 흐름은 유지하면서도 너무 과하지 않게 활기를 더할 수 있는 곡들을 골라봤어요."
+
+    if sleep_request and constraints["instrumental_required"] and verified_instrumental_only:
+        return (
+            "어젯밤 생각이 많아 충분히 쉬지 못한 만큼, 잠들기 전 부담 없이 들을 수 있는 잔잔한 연주곡 위주로 골라봤어요. "
+            "복잡한 생각에서 잠시 거리를 두고 편하게 쉬어가고 싶은 순간에 어울리는 곡들입니다."
+        )
+
+    if comfort_request or (normalized_mood == "anxious" and job_search_request):
+        return (
+            f"{_recommendation_need(context_text)}이 느껴져서, 자극적인 곡보다 호흡을 고르게 해주는 쪽으로 {track_count}곡을 골랐어요. "
+            f"따뜻한 보컬과 부드러운 무드를 중심으로, 초조함을 잠시 낮추고 다시 하루의 페이스를 찾는 데 어울리도록 구성했어요."
+        )
 
     variants = [
         (
@@ -704,7 +919,89 @@ def build_recommendation_message(
     return _pick_variant(base_seed, variants)
 
 
-def build_track_reason(track: TrackSummary, mood: str, context_text: str | None, index: int) -> str:
+def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: int) -> str:
+    focus = (recommendation_role or {}).get("focus", "")
+    situation_angle = (recommendation_role or {}).get("situation_angle", "")
+    templates = {
+        "생각의 속도를 늦추기": "잠시 머릿속의 속도를 늦추며 쉬어가고 싶을 때 잘 어울려요.",
+        "긴장을 느슨하게 풀기": "스스로를 너무 몰아붙이고 있다고 느껴질 때 부담 없이 들을 수 있어요.",
+        "복잡한 생각 정리하기": "여러 생각이 한꺼번에 떠오를 때 차분히 정리하며 듣기 좋습니다.",
+        "조용한 위로의 시간 만들기": "계획대로 풀리지 않아 지친 순간에 잠깐 쉬어가며 듣기 좋아요.",
+        "잠시 숨 고르기": "미래에 대한 걱정이 커질 때 잠깐 숨을 고르며 듣기 좋습니다.",
+        "현실적인 고민에서 거리 두기": "현실적인 고민이 계속 맴돌 때 잠시 다른 데로 시선을 돌리고 싶다면 들어보세요.",
+        "현재 공부 흐름 유지": "지금의 공부 흐름을 그대로 이어가며 듣기 좋아요.",
+        "적당한 활기 더하기": "너무 처지지 않게 가벼운 활기를 더하고 싶을 때 잘 어울려요.",
+        "기분 좋은 텐션 유지": "기분 좋은 텐션을 과하지 않게 이어가고 싶을 때 잘 맞아요.",
+        "지루함 방지": "집중이 조금 느슨해지는 구간에 분위기를 가볍게 바꾸고 싶을 때 어울려요.",
+        "공부 템포 유지": "해야 할 일을 같은 템포로 이어가며 듣기 좋습니다.",
+        "짧은 분위기 환기": "공부 흐름을 크게 바꾸지 않고 분위기를 잠깐 바꾸고 싶을 때 잘 어울려요.",
+        "기분 좋은 흐름 유지": "지금의 좋은 흐름을 그대로 이어가며 듣기 좋아요.",
+        "몰입 상태 이어가기": "지금의 몰입을 무리 없이 이어가고 싶을 때 잘 맞아요.",
+        "잠들기 전 긴장 내려놓기": "잠들기 전 몸과 마음의 긴장을 조금 내려놓고 싶을 때 잘 어울려요.",
+        "생각의 속도 늦추기": "생각이 계속 이어져 쉽게 잠들기 어려운 순간에, 머릿속의 속도를 조금 늦추며 듣기 좋아요.",
+        "조용히 쉬어가기": "자극적인 분위기보다 조용히 쉬어가고 싶은 밤에 부담 없이 들을 수 있어요.",
+        "수면 전 분위기 가라앉히기": "잠자리에 들기 전 차분한 분위기로 하루를 마무리하고 싶을 때 잘 맞아요.",
+        "복잡한 생각에서 거리 두기": "여러 생각이 한꺼번에 떠오를 때 잠시 다른 곳에 마음을 두고 싶다면 들어보세요.",
+        "편안한 잠자리 준비": "잠들기 전 편안한 시간을 만들고 싶은 순간에 곁들이기 좋아요.",
+    }
+    if focus in templates:
+        return templates[focus]
+    if situation_angle:
+        return f"{situation_angle}, 잠시 쉬어가며 듣기 좋아요."
+    return [
+        "잠시 생각의 속도를 늦추며 쉬어가고 싶을 때 잘 어울려요.",
+        "복잡한 마음을 천천히 정리하며 듣기 좋습니다.",
+    ][index % 2]
+
+
+def _tag_feature_sentence(track_tags: list[str], tag_labels: dict[str, str]) -> str | None:
+    tag_set = set(track_tags)
+    combinations = (
+        (("dreamy", "calm"), "몽환적이고 차분하게 가라앉는 분위기가 부담 없이 이어지는 곡이에요."),
+        (("soft", "warm"), "부드럽고 따뜻한 분위기가 편안하게 이어지는 곡이에요."),
+        (("rnb", "soul"), "R&B의 편안한 그루브와 소울 특유의 부드러운 분위기가 어우러지는 곡이에요."),
+        (("upbeat", "high_energy"), "밝고 활기찬 분위기가 일정하게 이어지는 곡이에요."),
+        (("comfort", "calm"), "편안하면서 차분한 분위기가 조용히 이어지는 곡이에요."),
+        (("emotional", "soft"), "감정적이지만 부드럽게 이어지는 분위기가 인상적인 곡이에요."),
+    )
+    for required_tags, sentence in combinations:
+        if set(required_tags).issubset(tag_set):
+            return sentence
+
+    features = [tag_labels[tag] for tag in track_tags if tag in tag_labels]
+    if not features:
+        return None
+    primary_feature = features[0]
+    secondary_feature = next((feature for feature in features[1:] if feature != primary_feature), None)
+    if secondary_feature:
+        return f"{primary_feature}, {secondary_feature}처럼 서로 다른 특징이 함께 느껴지는 곡이에요."
+    return f"{primary_feature} 같은 특징이 느껴지는 곡이에요."
+
+
+def _sleep_feature_sentence(track_tags: list[str], track_moods: list[str]) -> str | None:
+    """Use only calm-oriented catalog metadata when explaining a sleep ranking."""
+    tag_set = set(track_tags)
+    mood_set = set(track_moods)
+    if {"ambient", "dreamy"}.issubset(tag_set):
+        return "앰비언트와 몽환적인 분위기가 차분하게 이어지는 연주곡이에요."
+    if {"classical", "piano"}.issubset(tag_set):
+        return "클래식 피아노 중심의 연주가 조용히 이어지는 곡이에요."
+    if "ambient" in tag_set and "calm" in mood_set:
+        return "앰비언트 기반의 차분한 분위기가 이어지는 연주곡이에요."
+    if "calm" in tag_set or "calm" in mood_set:
+        return "차분한 분위기가 부담 없이 이어지는 연주곡이에요."
+    if "dreamy" in tag_set:
+        return "몽환적인 분위기가 잔잔하게 이어지는 연주곡이에요."
+    return None
+
+
+def build_track_reason(
+    track: TrackSummary,
+    mood: str,
+    context_text: str | None,
+    index: int,
+    recommendation_role: dict[str, str] | None = None,
+) -> str:
     normalized_mood = _normalize_mood(mood)
     mood_label = str(MOOD_PROFILES.get(normalized_mood, MOOD_PROFILES["calm"])["label"])
     context = _build_context_summary(context_text)
@@ -732,13 +1029,73 @@ def build_track_reason(track: TrackSummary, mood: str, context_text: str | None,
 
     sound_hint = _get_track_sound_hint(track)
     if sound_hint:
-        sound_point, focus_benefit = sound_hint
-        context_line = (
-            f"직접 적어준 {style_text or vibe_text} 방향과도 자연스럽게 이어지고, "
-            if style_text or vibe_text
-            else ""
+        sound_point, _ = sound_hint
+        return (
+            f"{_attach_particle(sound_point)} 자연스럽게 드러나는 곡이에요. "
+            f"{_role_listening_sentence(recommendation_role, index)}"
         )
-        return f"{track.artist_name}의 {track.name}은 {sound_point}. {context_line}{focus_benefit}"
+
+    facts = track.reason_facts or {}
+    track_tags = [str(tag) for tag in facts.get("tags", []) if tag]
+    track_moods = [str(item) for item in facts.get("moods", []) if item]
+    if _is_sleep_request(context_text):
+        sleep_feature = _sleep_feature_sentence(track_tags, track_moods)
+        if sleep_feature:
+            return f"{sleep_feature} {_role_listening_sentence(recommendation_role, index)}"
+    situation = _reason_situation(normalized_mood, context_text)
+    tag_labels = {
+        "soft": "부드러운 사운드",
+        "emotional": "감성적인 분위기",
+        "calm": "차분한 무드",
+        "dreamy": "몽환적인 분위기",
+        "warm": "따뜻한 분위기",
+        "comfort": "위로가 되는 분위기",
+        "love": "사랑 노래 분위기",
+        "soul": "소울 계열의 정서",
+        "rnb": "R&B 계열의 그루브",
+        "instrumental": "연주 중심 구성",
+        "jazz": "재즈 계열의 리듬",
+        "upbeat": "경쾌한 에너지",
+        "high_energy": "높은 에너지",
+        "driving": "추진력 있는 리듬",
+    }
+    feature_sentence = _tag_feature_sentence(track_tags, tag_labels)
+    if feature_sentence:
+        return (
+            f"{feature_sentence} "
+            f"{_role_listening_sentence(recommendation_role, index)}"
+        )
+
+    fallback_openings = {
+        "anxious": "생각이 많고 마음이 조급한 순간에 부담 없이 곁들여 듣기 좋은 곡이에요.",
+        "focused": "해야 할 일이 많아 마음이 분주할 때 부담 없이 곁들여 듣기 좋은 곡이에요.",
+    }
+    is_studying = any(token in (context_text or "").lower() for token in ("공부", "과제", "작업", "집중", "몰입"))
+    is_preparing_sleep = _is_sleep_request(context_text)
+    fallback_opening = (
+        "자극적인 분위기보다 편안하게 쉬어갈 수 있는 방향으로 고른 곡이에요."
+        if is_preparing_sleep
+        else "현재의 좋은 공부 흐름을 크게 바꾸지 않으면서 가볍게 곁들이기 좋은 곡이에요."
+        if is_studying
+        else fallback_openings.get(normalized_mood, "지금의 감정에 부담 없이 곁들여 듣기 좋은 곡이에요.")
+    )
+    fallback_angles = [
+        "잠시 생각의 속도를 늦추며 쉬어가고 싶을 때",
+        "마음을 조금 가볍게 하며 숨을 고르고 싶을 때",
+        "복잡한 생각을 천천히 정돈하고 싶을 때",
+        "오늘의 감정에 조용히 머물고 싶을 때",
+        "부담 없이 잠깐 쉬어가고 싶을 때",
+        "현실적인 고민에서 잠시 거리를 두고 싶을 때",
+    ]
+    if is_studying and (recommendation_role or {}).get("focus") == "짧은 분위기 환기":
+        return (
+            "현재의 좋은 공부 흐름에 부담 없이 곁들이기 좋은 곡이에요. "
+            "같은 분위기가 조금 지루해질 때 가볍게 변화를 주고 싶다면 들어보세요."
+        )
+    return (
+        f"{fallback_opening} "
+        f"{_role_listening_sentence(recommendation_role, index) if recommendation_role else fallback_angles[index % len(fallback_angles)] + ' 들어보세요.'}"
+    )
 
     if korean_rnb_request:
         variants = [
@@ -889,15 +1246,12 @@ def _search_track(access_token: str, name: str, artist_name: str, reason: str) -
             )
             if album_image_url or spotify_url:
                 mapped = _map_track(track, artist_name, [name])
-                mapped.reason = reason
-                return mapped
-
-        if tracks:
-            first_track = tracks[0]
-            if isinstance(first_track, dict):
-                mapped = _map_track(first_track, artist_name, [name])
-                mapped.reason = reason
-                return mapped
+                if _canonical_track_token(mapped.name) == _canonical_track_token(name) and _canonical_track_token(
+                    mapped.artist_name
+                ) == _canonical_track_token(artist_name):
+                    mapped.reason_facts = _build_reason_facts(name, artist_name)
+                    mapped.reason = reason
+                    return mapped
 
     return None
 
@@ -951,6 +1305,8 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
     context_lower = (context_text or "").lower()
     korean_rnb_request = _context_prefers_korean_rnb(context_text)
     punk_request = _context_prefers_punk_rock(context_text)
+    comfort_request = _context_requests_comfort(context_text)
+    sleep_request = _is_sleep_request(context_text)
     explicit_genres, _, _ = _extract_genre_family_matches(context_text)
     explicit_genre_set = set(explicit_genres)
 
@@ -980,6 +1336,25 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
         score -= 6
     if punk_request and candidate_artist in {"Green Day", "Paramore", "Blink-182", "Fall Out Boy", "Sum 41", "The Offspring", "Panic! At The Disco"}:
         score += 8
+    if comfort_request and candidate_tags & {"soft", "emotional", "calm", "dreamy", "warm", "comfort", "love", "soul"}:
+        score += 12
+    if comfort_request and candidate_tags & {"punk", "pop-punk", "rock", "high_energy", "driving"}:
+        score -= 18
+    if sleep_request:
+        # Instrumental is a gate, not a sleep-suitability score. Prefer candidates
+        # with calm/rest metadata and strongly demote energetic jazz subgenres.
+        if "calm" in candidate_moods:
+            score += 16
+        if "sad" in candidate_moods:
+            score += 4
+        if candidate_tags & {"ambient", "piano", "classical"}:
+            score += 22
+        if candidate_tags & {"calm", "soft", "dreamy", "emotional"}:
+            score += 12
+        if candidate_tags & {"fusion", "bebop", "hard-bop", "swing", "big-band", "high_energy", "driving"}:
+            score -= 28
+        if candidate_tags & {"jazz", "standard"}:
+            score += 3
     if any(token in context_lower for token in ("스윙", "swing", "빅밴드", "big band")) and candidate_tags & {"jazz", "standard", "instrumental"}:
         score += 7
     if any(token in context_lower for token in ("비밥", "bebop", "bop", "하드밥", "hard bop", "포스트밥", "post-bop")) and candidate_tags & {"jazz", "instrumental"}:
@@ -1002,14 +1377,38 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
     return score
 
 
-def _select_fallback_catalog(mood: str, context_text: str | None, limit: int) -> list[dict[str, object]]:
+def _select_fallback_catalog(
+    mood: str,
+    context_text: str | None,
+    limit: int,
+    selection_guidance: dict[str, Any] | None = None,
+) -> list[dict[str, object]]:
     catalog = FALLBACK_LIBRARY
+    constraints = extract_hard_constraints(context_text)
+    if constraints["instrumental_required"]:
+        # A missing tag is unknown, not proof that a track has no vocals.
+        catalog = [
+            candidate
+            for candidate in catalog
+            if "instrumental" in {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+        ]
     if _context_prefers_korean_rnb(context_text):
         preferred = [
             candidate
             for candidate in catalog
             if "korean" in {str(tag) for tag in candidate.get("tags", []) if tag}
             and {str(tag) for tag in candidate.get("tags", []) if tag} & {"rnb", "soul", "neo-soul", "soft", "dreamy"}
+        ]
+        if preferred:
+            catalog = preferred + [candidate for candidate in catalog if candidate not in preferred]
+    elif _context_requests_comfort(context_text):
+        preferred = [
+            candidate
+            for candidate in catalog
+            if {"soft", "emotional", "calm", "dreamy", "warm", "comfort", "love", "soul"}
+            & {str(tag) for tag in candidate.get("tags", []) if tag}
+            and not {"punk", "pop-punk", "rock", "high_energy", "driving"}
+            & {str(tag) for tag in candidate.get("tags", []) if tag}
         ]
         if preferred:
             catalog = preferred + [candidate for candidate in catalog if candidate not in preferred]
@@ -1021,6 +1420,22 @@ def _select_fallback_catalog(mood: str, context_text: str | None, limit: int) ->
         ]
         if preferred:
             catalog = preferred + [candidate for candidate in catalog if candidate not in preferred]
+
+    if selection_guidance and not _has_explicit_genre_request(context_text):
+        avoid_tags = {str(tag) for tag in selection_guidance.get("avoid_tags", [])}
+        preferred_tags = {str(tag) for tag in selection_guidance.get("preferred_tags", [])}
+        safe = [
+            candidate
+            for candidate in catalog
+            if not avoid_tags.intersection({str(tag) for tag in candidate.get("tags", [])})
+        ]
+        if safe:
+            preferred = [
+                candidate
+                for candidate in safe
+                if preferred_tags.intersection({str(tag) for tag in candidate.get("tags", [])})
+            ]
+            catalog = preferred + [candidate for candidate in safe if candidate not in preferred]
 
     ranked = sorted(
         catalog,
@@ -1042,21 +1457,35 @@ def _select_fallback_catalog(mood: str, context_text: str | None, limit: int) ->
     return unique
 
 
-def _fallback_tracks(mood: str, access_token: str | None = None, context_text: str | None = None, limit: int = FALLBACK_LIMIT) -> list[TrackSummary]:
-    catalog = _select_fallback_catalog(mood, context_text, limit)
+def _fallback_tracks(
+    mood: str,
+    access_token: str | None = None,
+    context_text: str | None = None,
+    limit: int = FALLBACK_LIMIT,
+    selection_guidance: dict[str, Any] | None = None,
+) -> list[TrackSummary]:
+    constraints = extract_hard_constraints(context_text)
+    # For a hard instrumental request, keep searching the verified catalog until
+    # enough tracks with real Spotify album art are available.
+    catalog_limit = len(FALLBACK_LIBRARY) if access_token and constraints["instrumental_required"] else limit
+    catalog = _select_fallback_catalog(mood, context_text, catalog_limit, selection_guidance)
     if not access_token:
-        return [
+        tracks = [
             TrackSummary(
                 track_id=f"fallback-{mood}-{index + 1}",
                 name=str(item["name"]),
                 artist_name=str(item["artist_name"]),
+                reason_facts=_build_reason_facts(str(item["name"]), str(item["artist_name"])),
                 reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                 spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
             )
             for index, item in enumerate(catalog)
         ]
+        return validate_hard_constraints(tracks, context_text)
 
     resolved: list[TrackSummary] = []
+    unresolved: list[TrackSummary] = []
+    cover_first = constraints["instrumental_required"]
     for index, item in enumerate(catalog):
         try:
             track = _search_track(
@@ -1065,23 +1494,45 @@ def _fallback_tracks(mood: str, access_token: str | None = None, context_text: s
                 str(item["artist_name"]),
                 str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
             )
-            if track is not None:
+            if track is not None and (track.album_image_url or not cover_first):
                 resolved.append(track)
+                if len(resolved) >= limit:
+                    break
                 continue
         except Exception:
             pass
+
+        if cover_first:
+            # Keep looking: a verified track without a resolved cover should not
+            # displace a later verified candidate with real album art.
+            unresolved.append(
+                TrackSummary(
+                    track_id=f"fallback-{mood}-{index + 1}",
+                    name=str(item["name"]),
+                    artist_name=str(item["artist_name"]),
+                    reason_facts=_build_reason_facts(str(item["name"]), str(item["artist_name"])),
+                    reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
+                    spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
+                )
+            )
+            continue
 
         resolved.append(
             TrackSummary(
                 track_id=f"fallback-{mood}-{index + 1}",
                 name=str(item["name"]),
                 artist_name=str(item["artist_name"]),
+                reason_facts=_build_reason_facts(str(item["name"]), str(item["artist_name"])),
                 reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                 spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
             )
         )
+        if len(resolved) >= limit and not cover_first:
+            break
 
-    return resolved[:limit]
+    if cover_first and len(resolved) < limit:
+        resolved.extend(unresolved[: limit - len(resolved)])
+    return validate_hard_constraints(resolved[:limit], context_text)
 
 
 def recommend_tracks(
@@ -1089,39 +1540,34 @@ def recommend_tracks(
     access_token: str | None = None,
     limit: int = 6,
     context_text: str | None = None,
+    selection_guidance: dict[str, Any] | None = None,
 ) -> list[TrackSummary]:
     normalized_mood = _normalize_mood(mood)
+    constraints = extract_hard_constraints(context_text)
     profile = MOOD_PROFILES.get(normalized_mood, MOOD_PROFILES["calm"])
     mood_label = str(profile["label"])
 
+    if constraints["instrumental_required"]:
+        # Spotify search/recommendation responses expose no verified vocals field.
+        # Stay within the tagged catalog rather than returning an unverified track.
+        return _fallback_tracks(
+            normalized_mood,
+            access_token=access_token or _get_app_access_token(),
+            context_text=context_text,
+            limit=limit,
+            selection_guidance=selection_guidance,
+        )
+
     if not access_token:
-        return _fallback_tracks(normalized_mood, access_token=None, context_text=context_text, limit=limit)
+        return _fallback_tracks(normalized_mood, access_token=None, context_text=context_text, limit=limit, selection_guidance=selection_guidance)
 
     try:
         has_explicit_genre_request = _has_explicit_genre_request(context_text)
-        llm_profile = None
-        if not has_explicit_genre_request:
-            try:
-                llm_profile = generate_track_selection_profile(normalized_mood, context_text)
-            except GeminiServiceError:
-                llm_profile = None
-
         available_genres = _fetch_available_genres(access_token)
         seed_genres = _pick_seed_genres(normalized_mood, available_genres, context_text=context_text)
-        if llm_profile and not has_explicit_genre_request:
-            seed_genres = list(
-                dict.fromkeys(
-                    [
-                        genre
-                        for genre in (
-                            list(llm_profile.get("seed_genres") or [])
-                            + seed_genres
-                        )
-                        if isinstance(genre, str) and (not available_genres or genre in available_genres)
-                    ]
-                )
-            )[:5]
         context_genres, context_params = _merge_context_audio_hints(context_text)
+        if selection_guidance and not has_explicit_genre_request:
+            context_params.update(selection_guidance.get("audio_hints") or {})
         query: dict[str, object] = {
             "limit": limit,
             "seed_genres": ",".join(seed_genres),
@@ -1152,54 +1598,6 @@ def recommend_tracks(
                 if len(curated_tracks) >= limit:
                     return curated_tracks[:limit]
 
-        if llm_profile and not has_explicit_genre_request:
-            for candidate in llm_profile.get("candidate_tracks") or []:
-                if not isinstance(candidate, dict):
-                    continue
-                candidate_name = str(candidate.get("name") or "").strip()
-                candidate_artist = str(candidate.get("artist_name") or "").strip()
-                reason_hint = str(candidate.get("reason_hint") or "").strip()
-                if not candidate_name or not candidate_artist:
-                    continue
-                track = _search_track(
-                    access_token,
-                    candidate_name,
-                    candidate_artist,
-                    reason_hint or f"{mood_label} 분위기와 잘 맞는 후보곡이에요.",
-                )
-                if track is None:
-                    continue
-                key = (track.name, track.artist_name)
-                if key in seen_pairs:
-                    continue
-                seen_pairs.add(key)
-                if reason_hint:
-                    track.reason = reason_hint
-                curated_tracks.append(track)
-                if len(curated_tracks) >= limit:
-                    return curated_tracks[:limit]
-
-            for term in llm_profile.get("search_terms") or []:
-                if not isinstance(term, str) or not term.strip():
-                    continue
-                for track in _search_tracks_by_query(
-                    access_token,
-                    term.strip(),
-                    reason=f"입력한 분위기와 연결되는 '{term.strip()}' 검색 결과예요.",
-                    mood_label=mood_label,
-                    seed_genres=seed_genres,
-                    limit=3,
-                ):
-                    key = (track.name, track.artist_name)
-                    if key in seen_pairs:
-                        continue
-                    seen_pairs.add(key)
-                    curated_tracks.append(track)
-                    if len(curated_tracks) >= limit:
-                        break
-                if len(curated_tracks) >= limit:
-                    break
-
         if len(curated_tracks) >= limit:
             return curated_tracks[:limit]
 
@@ -1214,13 +1612,14 @@ def recommend_tracks(
                     continue
                 seen_pairs.add(key)
                 unique_tracks.append(track)
-            if len(unique_tracks) < limit and (context_genres or llm_profile):
+            if len(unique_tracks) < limit and context_genres:
                 # Spotify 결과가 적으면 컨텍스트 기반 fallback으로 빈 칸을 채운다.
                 filler_tracks = _fallback_tracks(
                     normalized_mood,
                     access_token=access_token,
                     context_text=context_text,
                     limit=limit,
+                    selection_guidance=selection_guidance,
                 )
                 for filler in filler_tracks:
                     key = (filler.name, filler.artist_name)
@@ -1232,8 +1631,8 @@ def recommend_tracks(
                         break
             return unique_tracks[:limit]
     except SpotifyRecommendationError:
-        return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit)
+        return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance)
     except Exception:
-        return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit)
+        return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance)
 
-    return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit)
+    return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance)

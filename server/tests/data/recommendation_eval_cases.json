@@ -1,0 +1,86 @@
+[
+  {
+    "id": "job-search-anxiety-comfort",
+    "description": "취업 준비가 마음처럼 풀리지 않아 불안한 상태에서는 초조함을 낮추는 위로를 우선한다.",
+    "mood": "anxious",
+    "text": "빨리 취업하고 싶은데 마음 같지 않아서 너무 불안해. 이 취업에 대한 불안함을 풀어줄 수 있는 노래면 좋겠어.",
+    "selected_vibes": ["따뜻한", "위로되는"],
+    "retrieved_chunk_ids": ["comfort-mode", "comfort-breathing", "vibe-to-sound"],
+    "expect": {
+      "must_include_any_tags": ["soft", "warm", "comfort", "love"],
+      "must_exclude_tags": ["punk", "pop-punk", "rock", "high_energy", "driving"],
+      "message_must_include": ["취업"]
+    }
+  },
+  {
+    "id": "breakup-anxiety-comfort",
+    "description": "이별 위기와 불안 상태에서 포근한 위로를 원할 때는 거친 고에너지 곡을 피한다.",
+    "mood": "anxious",
+    "text": "남자친구랑 헤어질 위기라 너무 불안해. 포근한 사랑 노래로 위로받고 싶어.",
+    "selected_vibes": ["위로되는", "따뜻한", "잔잔한", "감성적인"],
+    "retrieved_chunk_ids": ["comfort-mode", "comfort-breathing", "vibe-to-sound"],
+    "expect": {
+      "must_include_any_tags": ["soft", "warm", "comfort", "love"],
+      "must_exclude_tags": ["punk", "pop-punk", "rock", "high_energy", "driving"]
+    }
+  },
+  {
+    "id": "lonely-gentle-comfort",
+    "description": "외로움과 잔잔한 위로를 원하면 부드러운 후보가 우선이다.",
+    "mood": "lonely",
+    "text": "혼자 있으니 외롭고 마음이 공허해. 잔잔하게 위로해주는 곡을 듣고 싶어.",
+    "selected_vibes": ["위로되는", "잔잔한", "차분한"],
+    "retrieved_chunk_ids": ["comfort-mode", "comfort-breathing", "vibe-to-sound"],
+    "expect": {
+      "must_include_any_tags": ["soft", "calm", "comfort", "emotional"],
+      "must_exclude_tags": ["punk", "pop-punk", "rock", "high_energy", "driving"]
+    }
+  },
+  {
+    "id": "study-focus-flow",
+    "description": "공부와 몰입 요청은 일정한 텐션을 우선한다.",
+    "mood": "focused",
+    "text": "카페에서 공부 중이라 집중을 유지할 수 있는 곡이 필요해.",
+    "selected_vibes": ["몰입되는", "차분한"],
+    "retrieved_chunk_ids": ["focus-flow", "vibe-to-sound"],
+    "expect": {
+      "must_exclude_tags": []
+    }
+  },
+  {
+    "id": "explicit-punk-overrides-comfort",
+    "description": "사용자가 펍크락을 명시하면 일반 위로 규칙보다 장르 선호가 우선이다.",
+    "mood": "anxious",
+    "text": "답답해서 펍크락으로 속을 시원하게 풀고 싶어.",
+    "selected_vibes": ["강렬한", "기분 전환되는"],
+    "retrieved_chunk_ids": ["genre-preservation", "punk-rock-release"],
+    "expect": {
+      "must_include_any_tags": ["punk", "pop-punk", "rock", "high_energy"],
+      "must_exclude_tags": []
+    }
+  },
+  {
+    "id": "korean-rnb-request",
+    "description": "명시한 한국 R&B 장르 선호를 유지한다.",
+    "mood": "calm",
+    "text": "한국 R&B로 부드럽고 감성적인 곡 추천해줘.",
+    "selected_vibes": ["감성적인", "잔잔한"],
+    "retrieved_chunk_ids": ["genre-preservation", "korean-rnb"],
+    "expect": {
+      "must_include_any_tags": ["korean", "rnb", "soul", "soft", "dreamy"],
+      "must_exclude_tags": []
+    }
+  },
+  {
+    "id": "tired-warm-rest",
+    "description": "피곤함과 따뜻한 위로 요청에서는 높은 에너지를 피한다.",
+    "mood": "tired",
+    "text": "오늘 너무 피곤해서 따뜻하게 쉬어갈 수 있는 곡을 듣고 싶어.",
+    "selected_vibes": ["위로되는", "따뜻한", "잔잔한"],
+    "retrieved_chunk_ids": ["comfort-mode", "vibe-to-sound"],
+    "expect": {
+      "must_include_any_tags": ["soft", "warm", "calm", "comfort"],
+      "must_exclude_tags": ["punk", "pop-punk", "rock", "high_energy", "driving"]
+    }
+  }
+]

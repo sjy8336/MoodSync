@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import { getMoodHistory } from '../services/apiClient';
+import FavoriteToast from '../components/FavoriteToast';
+import { getMoodHistory, getFavorites, saveFavorite, removeFavorite } from '../services/apiClient';
 
 /* ─────────────────────────────────────────
    ICONS
@@ -14,7 +15,7 @@ const Ic = ({ d, size = 20, color = 'currentColor', fill = 'none', sw = 1.8, cla
         viewBox="0 0 24 24"
         fill={fill}
         stroke={color}
-        strokeWidth={sw}햐
+        strokeWidth={sw}
         strokeLinecap="round"
         strokeLinejoin="round"
         className={`inline-block shrink-0 align-middle ${className}`}
@@ -47,6 +48,13 @@ const I = {
     bar: ['M3 3v18h18', 'M7 16v-5', 'M11 16v-9', 'M15 16v-3'],
     cloud: 'M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z',
     pen: 'M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z',
+    trash: [
+        'M3 6h18',
+        'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+        'M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6',
+        'M10 11v6',
+        'M14 11v6',
+    ],
 };
 
 /* ─────────────────────────────────────────
@@ -242,28 +250,22 @@ const formatShortDate = (dateStr) => {
     return parts.length !== 3 ? dateStr : `${parts[1]}.${parts[2]}`;
 };
 
-/* ─────────────────────────────────────────
-   DUMMY DATA
-───────────────────────────────────────── */
-const buildDummyHistory = (year, month) => {
-    const sample = [
-        {
-            day: 28,
-            mood: 'tired',
-            rawText: '5시간밖에 못 자서 잔잔한 스탠다드 재즈가 듣고싶어.. 원하는 분위기: 감성적인, 차분한, 잔잔한.',
-            useJazz: true,
-        },
-        {
-            day: 27,
-            mood: 'tired',
-            rawText: '오늘 좀 피곤하고 아무것도 하기 싫었어요. 원하는 분위기: 잔잔한, 위로되는.',
-        },
-        { day: 25, mood: 'excited', rawText: '내일 여행 가는 생각에 계속 들떴어요. 원하는 분위기: 신나는, 들뜨는.' },
-        { day: 23, mood: 'sad', rawText: '괜히 마음이 가라앉는 하루였어요. 원하는 분위기: 잔잔한.' },
-        { day: 21, mood: 'focused', rawText: '집중해서 할 일을 끝낸 날.' },
-        { day: 18, mood: 'happy', rawText: '친구들과 즐거운 시간을 보냈어요. 원하는 분위기: 신나는, 밝은.' },
-    ];
+/* 최근 기록 섹션 제목: 선택한 날짜를 "8월 13일 기록" / "26년 8월 13일 기록" 형태로 */
+const formatRecentHeading = (dateKey) => {
+    if (!dateKey) return '기록';
+    const [y, m, d] = dateKey.split('-').map(Number);
+    const nowYear = new Date().getFullYear();
+    if (y === nowYear) return `${m}월 ${d}일 기록`;
+    return `${String(y).slice(2)}년 ${m}월 ${d}일 기록`;
+};
 
+/* 트랙 고유 id — 서버가 track_id를 안 줄 수 있어 이름+아티스트로 보정 */
+const getTrackId = (track) => track?.track_id || `${track?.name || ''}-${track?.artist_name || ''}`;
+
+/* ─────────────────────────────────────────
+   더미 데이터 (배열, 같은 날짜 여러 건 가능)
+───────────────────────────────────────── */
+const buildDummyRecords = (year, month) => {
     const dummyTracks = [
         {
             track_id: 'd1',
@@ -301,32 +303,59 @@ const buildDummyHistory = (year, month) => {
         },
     ];
 
-    const records = sample.map((s) => ({
+    // day 27에는 두 건을 넣어 "같은 날 여러 번 추천받은" 케이스를 보여줌
+    const sample = [
+        {
+            day: 28,
+            mood: 'tired',
+            rawText: '5시간밖에 못 자서 잔잔한 스탠다드 재즈가 듣고싶어.. 원하는 분위기: 감성적인, 차분한, 잔잔한.',
+            tracks: jazzTracks,
+        },
+        {
+            day: 27,
+            mood: 'tired',
+            rawText: '오늘 좀 피곤하고 아무것도 하기 싫었어요. 원하는 분위기: 잔잔한, 위로되는.',
+            tracks: dummyTracks,
+        },
+        {
+            day: 27,
+            mood: 'happy',
+            rawText: '저녁에 산책하고 기분이 한결 좋아졌어요. 원하는 분위기: 밝은, 신나는.',
+            tracks: dummyTracks,
+        },
+        {
+            day: 25,
+            mood: 'excited',
+            rawText: '내일 여행 가는 생각에 계속 들떴어요. 원하는 분위기: 신나는, 들뜨는.',
+            tracks: dummyTracks,
+        },
+        {
+            day: 23,
+            mood: 'sad',
+            rawText: '괜히 마음이 가라앉는 하루였어요. 원하는 분위기: 잔잔한.',
+            tracks: jazzTracks,
+        },
+        { day: 21, mood: 'focused', rawText: '집중해서 할 일을 끝낸 날.', tracks: dummyTracks },
+        {
+            day: 18,
+            mood: 'happy',
+            rawText: '친구들과 즐거운 시간을 보냈어요. 원하는 분위기: 신나는, 밝은.',
+            tracks: dummyTracks,
+        },
+    ];
+
+    return sample.map((s, idx) => ({
+        id: `dummy-${year}-${month}-${idx}`,
         date: toKey(year, month, s.day),
         mood: s.mood,
         rawText: s.rawText || '',
-        tracks: s.useJazz ? jazzTracks : dummyTracks,
+        tracks: s.tracks || [],
     }));
-
-    const moodCounts = records.reduce((acc, r) => {
-        acc[r.mood] = (acc[r.mood] || 0) + 1;
-        return acc;
-    }, {});
-    const topMoodKey = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-
-    // 더미는 rawText에 분위기가 포함된 형태로 저장 → 파싱해서 집계
-    const allVibes = records.flatMap((r) => parseInputNote(r.rawText).vibes);
-    const vibeCounts = allVibes.reduce((acc, v) => {
-        acc[v] = (acc[v] || 0) + 1;
-        return acc;
-    }, {});
-    const topVibe = Object.entries(vibeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
-
-    return {
-        summary: { recordedDays: records.length, topMood: topMoodKey, topVibe, moodCounts },
-        records,
-    };
 };
+
+/* 서버에서 온 레코드에 고유 id가 없을 수 있어 보정 */
+const ensureRecordIds = (list) =>
+    (list || []).map((r, idx) => ({ ...r, id: r.id || r.record_id || `${r.date}-${idx}` }));
 
 /* ─────────────────────────────────────────
    SUMMARY CARD
@@ -334,12 +363,16 @@ const buildDummyHistory = (year, month) => {
 function SummaryCard({ icon, iconBg, iconColor, label, value, valueColor }) {
     return (
         <div className="flex items-center gap-4 bg-white border border-[#E5DFD3] rounded-3xl px-5 py-5 sm:px-6 sm:py-6">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${getThemeSoftClass(iconBg)}`}>
+            <div
+                className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${getThemeSoftClass(iconBg)}`}
+            >
                 <Ic d={icon} size={22} color={iconColor} />
             </div>
             <div className="min-w-0">
                 <p className="text-[11px] font-bold text-[#A39CAC] uppercase tracking-[0.06em] mb-1">{label}</p>
-                <p className={`text-[19px] font-extrabold tracking-[-0.02em] truncate ${valueColor ? getThemeTextClass(valueColor) : 'text-[#211C26]'}`}>
+                <p
+                    className={`text-[19px] font-extrabold tracking-[-0.02em] truncate ${valueColor ? getThemeTextClass(valueColor) : 'text-[#211C26]'}`}
+                >
                     {value}
                 </p>
             </div>
@@ -404,6 +437,7 @@ function YearMonthPicker({ year, month, onChange, onClose }) {
 
 /* ─────────────────────────────────────────
    CALENDAR
+   recordsByDate: { [dateKey]: record[] } — 하루에 여러 건이면 점도 여러 개
 ───────────────────────────────────────── */
 function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, recordsByDate, selectedDate, onSelectDate }) {
     const grid = useMemo(() => buildCalendarGrid(year, month), [year, month]);
@@ -419,11 +453,8 @@ function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, records
 
     return (
         <div className="bg-white border border-[#E5DFD3] rounded-3xl p-5 sm:p-6">
-            {/* 월 네비게이션
-                핵심: 피커 드롭다운을 flex row 완전히 밖 별도 relative wrapper에 배치.
-                flex row 안에 있으면 pickerOpen 시 flex 자식으로 취급되어 화살표가 밀림. */}
+            {/* 월 네비게이션 */}
             <div className="relative mb-6">
-                {/* flex row — 년월 버튼 + 화살표. 피커는 여기 없음 */}
                 <div className="flex items-center justify-between">
                     <button
                         onClick={(e) => {
@@ -452,7 +483,6 @@ function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, records
                         </button>
                     </div>
                 </div>
-                {/* 피커: position absolute라 레이아웃 흐름 완전히 이탈 → 화살표 절대 안 밀림 */}
                 {pickerOpen && (
                     <div className="absolute left-0 top-[calc(100%+4px)] z-30" onClick={(e) => e.stopPropagation()}>
                         <YearMonthPicker
@@ -474,15 +504,13 @@ function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, records
                 ))}
             </div>
 
-            {/* 날짜 그리드
-                ↓ 수정 1: h-11 sm:h-12 → h-[52px] sm:h-[56px] (높이 조금 더 키움) */}
+            {/* 날짜 그리드 */}
             <div className="grid grid-cols-7 gap-x-[2px] gap-y-[2px]">
                 {grid.flat().map((day, idx) => {
                     if (day === null) return <div key={idx} className="h-[52px] sm:h-[56px]" />;
 
                     const dateKey = toKey(year, month, day);
-                    const record = recordsByDate[dateKey];
-                    const theme = record ? getMoodTheme(record.mood) : null;
+                    const dayRecords = recordsByDate[dateKey] || [];
                     const isSelected = selectedDate === dateKey;
                     const isToday = dateKey === todayKey;
 
@@ -499,10 +527,23 @@ function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, records
                             >
                                 {day}
                             </span>
-                            <span
-                                className="w-[5px] h-[5px] rounded-full"
-                                className={`w-[5px] h-[5px] rounded-full ${record ? (isSelected ? 'bg-white' : getThemeBgClass(theme.color)) : 'bg-transparent'}`}
-                            />
+                            <span className="flex items-center justify-center gap-[3px] h-[5px]">
+                                {dayRecords.length === 0 ? (
+                                    <span className="w-[5px] h-[5px] rounded-full bg-transparent" />
+                                ) : (
+                                    dayRecords.slice(0, 3).map((rec, i) => {
+                                        const t = getMoodTheme(rec.mood);
+                                        return (
+                                            <span
+                                                key={rec.id || i}
+                                                className={`w-[5px] h-[5px] rounded-full ${
+                                                    isSelected ? 'bg-white' : getThemeBgClass(t.color)
+                                                }`}
+                                            />
+                                        );
+                                    })
+                                )}
+                            </span>
                         </button>
                     );
                 })}
@@ -512,14 +553,16 @@ function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, records
 }
 
 /* ─────────────────────────────────────────
-   ALBUM COVER (RecommendationPage 폴백 스타일)
+   ALBUM COVER
 ───────────────────────────────────────── */
 function AlbumCover({ track, className = '', roundedClass = 'rounded-[10px]', iconSize = 12 }) {
     const [imageFailed, setImageFailed] = useState(false);
     const hasAlbumImage = Boolean(track?.album_image_url) && !imageFailed;
 
     return (
-        <div className={`shrink-0 overflow-hidden bg-[linear-gradient(135deg,#FFEAE6_0%,#ECEDFD_55%,#FFF3DE_100%)] ${roundedClass} ${className}`}>
+        <div
+            className={`shrink-0 overflow-hidden bg-[linear-gradient(135deg,#FFEAE6_0%,#ECEDFD_55%,#FFF3DE_100%)] ${roundedClass} ${className}`}
+        >
             {hasAlbumImage ? (
                 <img
                     src={track.album_image_url}
@@ -541,8 +584,18 @@ function AlbumCover({ track, className = '', roundedClass = 'rounded-[10px]', ic
 
 /* ─────────────────────────────────────────
    TRACK ROW
+   재생 버튼 옆에 좋아요(하트) 버튼을 함께 배치.
+   RecommendationPage의 TrackCard와 동일한 톤(테두리 원형 버튼 → liked 시 레드톤 채움)으로 통일.
 ───────────────────────────────────────── */
-function TrackRow({ track, index }) {
+function TrackRow({ track, index, mood, liked, onToggleLike }) {
+    const trackId = getTrackId(track);
+
+    const handleLikeClick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onToggleLike?.(trackId, track, mood);
+    };
+
     return (
         <div className="flex items-center gap-3 py-2">
             <span className="text-[11px] font-bold text-[#A39CAC] w-4 shrink-0 text-center">
@@ -575,28 +628,40 @@ function TrackRow({ track, index }) {
                     {track.artist_name}
                 </a>
             </div>
-                    <a
-                        href={track.spotify_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Spotify에서 듣기"
-                        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-transform hover:scale-105 bg-[#1ED760]"
-                    >
-                <Ic d={I.play} size={12} color="#191414" fill="#191414" sw={0} />
-            </a>
+
+            {/* 좋아요 + 재생 버튼 그룹 */}
+            <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                    onClick={handleLikeClick}
+                    aria-label={liked ? '좋아요 취소' : '좋아요'}
+                    className={`flex h-8 w-8 items-center justify-center rounded-full border-[1.5px] transition-all duration-200 ${
+                        liked
+                            ? 'border-[#FF6B5E] bg-[#FFEAE6]'
+                            : 'border-[#E5DFD3] bg-transparent hover:border-[#D6CFC1]'
+                    }`}
+                >
+                    <Ic d={I.heart} size={13} color={liked ? '#FF6B5E' : '#A39CAC'} fill={liked ? '#FF6B5E' : 'none'} />
+                </button>
+                <a
+                    href={track.spotify_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label="Spotify에서 듣기"
+                    className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-transform hover:scale-105 bg-[#1ED760]"
+                >
+                    <Ic d={I.play} size={12} color="#191414" fill="#191414" sw={0} />
+                </a>
+            </div>
         </div>
     );
 }
 
 /* ─────────────────────────────────────────
    SELECTED DAY PANEL
-
-   수정 사항:
-   1. rawText를 parseInputNote로 파싱 → freeText / vibes 분리
-   2. "선택한 감정" 영역에서 아이콘 제거 (pill 텍스트만)
-   3. "원하는 분위기"와 "직접 입력한 내용"을 별도 블록으로 표시
+   records: 선택한 날짜의 기록 배열. 대표로 첫 건을 보여주고,
+   여러 건이면 총 건수 뱃지를 붙여 아래 목록으로 유도.
 ───────────────────────────────────────── */
-function SelectedDayPanel({ dateKey, record }) {
+function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
     const [expanded, setExpanded] = useState(false);
 
     const dateObj = useMemo(() => {
@@ -607,6 +672,9 @@ function SelectedDayPanel({ dateKey, record }) {
     useEffect(() => {
         setExpanded(false);
     }, [dateKey]);
+
+    const record = records?.[0] || null;
+    const extraCount = Math.max(0, (records?.length || 0) - 1);
 
     if (!record) {
         return (
@@ -632,7 +700,6 @@ function SelectedDayPanel({ dateKey, record }) {
     const trackCount = record.tracks?.length || 0;
     const representativeTrack = record.tracks?.[0];
 
-    /* ↓ 수정 2: rawText → parseInputNote로 파싱해서 freeText / vibes 분리 */
     const { freeText, vibes: parsedVibes } = parseInputNote(record.rawText || record.text || '');
     const vibes = record.vibes?.length ? record.vibes : parsedVibes;
     const hasVibes = vibes.length > 0;
@@ -640,17 +707,26 @@ function SelectedDayPanel({ dateKey, record }) {
 
     return (
         <div className="bg-white border border-[#E5DFD3] rounded-3xl p-6 sm:p-7">
-            <p className="text-[12px] font-bold text-[#A39CAC] uppercase tracking-[0.06em] mb-4">{dateObj}</p>
+            <div className="flex items-center justify-between gap-2 mb-4">
+                <p className="text-[12px] font-bold text-[#A39CAC] uppercase tracking-[0.06em]">{dateObj}</p>
+                {extraCount > 0 && (
+                    <span className="text-[11px] font-bold text-[#7B7FF0] bg-[#ECEDFD] px-2 py-[3px] rounded-full">
+                        +{extraCount}건 더 있어요
+                    </span>
+                )}
+            </div>
 
-            {/* ↓ 수정 3: 선택한 감정 — 아이콘 없이 pill 텍스트만 */}
+            {/* 선택한 감정 */}
             <div className="mb-5">
                 <p className="text-[11px] font-semibold text-[#A39CAC] uppercase tracking-[0.06em] mb-2">선택한 감정</p>
-                <span className={`inline-flex items-center rounded-full px-3 py-1 text-[12.5px] font-bold text-white ${getThemeBgClass(theme.color)}`}>
+                <span
+                    className={`inline-flex items-center rounded-full px-3 py-1 text-[12.5px] font-bold text-white ${getThemeBgClass(theme.color)}`}
+                >
                     {theme.label}
                 </span>
             </div>
 
-            {/* 원하는 분위기 — vibes 배열에서 별도 렌더 */}
+            {/* 원하는 분위기 */}
             {hasVibes && (
                 <div className="mb-5">
                     <p className="text-[11px] font-semibold text-[#A39CAC] uppercase tracking-[0.06em] mb-2">
@@ -669,13 +745,15 @@ function SelectedDayPanel({ dateKey, record }) {
                 </div>
             )}
 
-            {/* 직접 입력한 내용 — freeText만 별도 렌더 */}
+            {/* 직접 입력한 내용 */}
             {hasFreeText && (
                 <div className="mb-5">
                     <p className="text-[11px] font-semibold text-[#A39CAC] uppercase tracking-[0.06em] mb-2">
                         직접 입력한 내용
                     </p>
-                    <p className={`border-l-2 pl-3 text-[13.5px] leading-relaxed text-[#211C26] ${getThemeBorderLeftClass(theme.soft)}`}>
+                    <p
+                        className={`border-l-2 pl-3 text-[13.5px] leading-relaxed text-[#211C26] ${getThemeBorderLeftClass(theme.soft)}`}
+                    >
                         {freeText}
                     </p>
                 </div>
@@ -702,7 +780,12 @@ function SelectedDayPanel({ dateKey, record }) {
                                 rel="noopener noreferrer"
                                 className="block shrink-0 rounded-[10px] overflow-hidden leading-none"
                             >
-                                <AlbumCover track={representativeTrack} className="w-11 h-11" roundedClass="rounded-[10px]" iconSize={13} />
+                                <AlbumCover
+                                    track={representativeTrack}
+                                    className="w-11 h-11"
+                                    roundedClass="rounded-[10px]"
+                                    iconSize={13}
+                                />
                             </a>
                             <div className="min-w-0 flex-1">
                                 <a
@@ -721,7 +804,14 @@ function SelectedDayPanel({ dateKey, record }) {
                     {expanded && (
                         <div className="flex flex-col divide-y divide-[#F1ECE3] mb-3">
                             {record.tracks.map((track, idx) => (
-                                <TrackRow key={track.track_id || idx} track={track} index={idx} />
+                                <TrackRow
+                                    key={getTrackId(track) || idx}
+                                    track={track}
+                                    index={idx}
+                                    mood={record.mood}
+                                    liked={favoriteIds?.has(getTrackId(track))}
+                                    onToggleLike={onToggleLike}
+                                />
                             ))}
                         </div>
                     )}
@@ -745,62 +835,110 @@ function SelectedDayPanel({ dateKey, record }) {
 }
 
 /* ─────────────────────────────────────────
-   RECENT RECORD ITEM
+   DATE RECORD CARD (아코디언 + 삭제)
+   선택한 날짜의 기록 하나를 나타내는 카드.
+   헤더를 누르면 그 자리에서 곡 목록이 펼쳐지고,
+   오른쪽 휴지통 아이콘으로 삭제(2단계 확인) 가능.
 ───────────────────────────────────────── */
-function RecentRecordItem({ record, isSelected, onClick }) {
+function DateRecordCard({ record, isExpanded, onToggle, onDelete, favoriteIds, onToggleLike }) {
+    const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+    useEffect(() => {
+        setConfirmingDelete(false);
+    }, [record.id]);
+
     const theme = getMoodTheme(record.mood);
-    const representativeTrack = record.tracks?.[0];
     const trackCount = record.tracks?.length || 0;
-    const { vibes: parsedVibes } = parseInputNote(record.rawText || record.text || '');
+    const { freeText, vibes: parsedVibes } = parseInputNote(record.rawText || record.text || '');
     const vibes = record.vibes?.length ? record.vibes : parsedVibes;
 
     return (
-        <button
-            onClick={onClick}
-            className={`w-full text-left bg-white border rounded-2xl px-4 py-4 sm:px-5 transition-all ${
-                isSelected ? 'border-[#211C26]' : 'border-[#E5DFD3] hover:border-[#D6CFC1] hover:-translate-y-px'
+        <div
+            className={`bg-white border rounded-2xl overflow-hidden transition-colors ${
+                isExpanded ? 'border-[#211C26]' : 'border-[#E5DFD3] hover:border-[#D6CFC1]'
             }`}
         >
-            <div className="flex items-center gap-3">
-                <div
-                    className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${getThemeSoftClass(theme.soft)}`}
-                >
-                    <Ic d={I.calHeart} size={18} color={theme.color} />
-                </div>
-                <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 mb-[2px]">
-                        <span className="text-[13px] font-bold text-[#211C26]">{formatShortDate(record.date)}</span>
-                        <span className={`rounded-full px-2 py-[2px] text-[11.5px] font-bold ${getThemeToneClass(theme.soft, theme.color)}`}>
-                            {theme.label}
-                        </span>
-                    </div>
-                    {vibes.length > 0 && <p className="text-[12px] text-[#A39CAC] truncate">{vibes.join(' · ')}</p>}
-                </div>
-                {representativeTrack?.spotify_url && (
-                    <a
-                        href={representativeTrack.spotify_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        aria-label="Spotify에서 듣기"
-                        className="w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-transform hover:scale-105 bg-[#1ED760]"
+            <div className="flex items-center gap-2 px-4 py-4 sm:px-5">
+                <button onClick={onToggle} className="flex flex-1 items-center gap-3 min-w-0 text-left">
+                    <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${getThemeSoftClass(theme.soft)}`}
                     >
-                        <Ic d={I.play} size={13} color="#191414" fill="#191414" sw={0} />
-                    </a>
+                        <Ic d={I.calHeart} size={18} color={theme.color} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-[2px]">
+                            <span
+                                className={`rounded-full px-2 py-[2px] text-[11.5px] font-bold ${getThemeToneClass(theme.soft, theme.color)}`}
+                            >
+                                {theme.label}
+                            </span>
+                            {trackCount > 0 && (
+                                <span className="text-[11.5px] text-[#A39CAC] font-semibold">추천 {trackCount}곡</span>
+                            )}
+                        </div>
+                        {vibes.length > 0 ? (
+                            <p className="text-[12px] text-[#A39CAC] truncate">{vibes.join(' · ')}</p>
+                        ) : freeText ? (
+                            <p className="text-[12px] text-[#A39CAC] truncate">{freeText}</p>
+                        ) : null}
+                    </div>
+                    <Ic d={isExpanded ? I.chevUp : I.chevDown} size={16} color="#A39CAC" />
+                </button>
+
+                {confirmingDelete ? (
+                    <div className="flex items-center gap-1 shrink-0">
+                        <button
+                            onClick={() => onDelete(record.id)}
+                            className="text-[11.5px] font-bold text-white bg-[#FF6B5E] px-3 py-[6px] rounded-full hover:bg-[#E85A4D] transition-colors"
+                        >
+                            삭제
+                        </button>
+                        <button
+                            onClick={() => setConfirmingDelete(false)}
+                            className="text-[11.5px] font-bold text-[#6E6678] px-3 py-[6px] rounded-full border border-[#E5DFD3] hover:bg-[#F1ECE3] transition-colors"
+                        >
+                            취소
+                        </button>
+                    </div>
+                ) : (
+                    <button
+                        onClick={() => setConfirmingDelete(true)}
+                        aria-label="기록 삭제"
+                        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-[#A39CAC] hover:text-[#FF6B5E] hover:bg-[#FFEAE6] transition-colors"
+                    >
+                        <Ic d={I.trash} size={15} color="currentColor" />
+                    </button>
                 )}
             </div>
-            {trackCount > 0 && (
-                <p className="flex items-center gap-[5px] text-[11.5px] text-[#A39CAC] mt-3 pl-[52px]">
-                    <Ic d={I.music} size={11} color="#A39CAC" />
-                    추천 음악 {trackCount}곡
-                    {representativeTrack && (
-                        <span className="text-[#6E6678] font-medium truncate">
-                            · {representativeTrack.name} - {representativeTrack.artist_name}
-                        </span>
+
+            {isExpanded && (
+                <div className="px-4 pb-4 sm:px-5 border-t border-[#F1ECE3] pt-3">
+                    {freeText && vibes.length > 0 && (
+                        <p className="text-[12.5px] leading-relaxed text-[#6E6678] mb-3">{freeText}</p>
                     )}
-                </p>
+                    {trackCount > 0 ? (
+                        <div className="flex flex-col divide-y divide-[#F1ECE3]">
+                            {record.tracks.map((track, idx) => (
+                                <TrackRow
+                                    key={getTrackId(track) || idx}
+                                    track={track}
+                                    index={idx}
+                                    mood={record.mood}
+                                    liked={favoriteIds?.has(getTrackId(track))}
+                                    onToggleLike={onToggleLike}
+                                />
+                            ))}
+                        </div>
+                    ) : (
+                        <p className="text-[12.5px] text-[#A39CAC]">추천된 음악이 없어요.</p>
+                    )}
+                    <div className="flex items-center gap-[6px] mt-3 pt-3 border-t border-[#F1ECE3]">
+                        <SpotifyMark size={13} />
+                        <span className="text-[11px] text-[#A39CAC]">곡 정보 및 앨범 커버: Provided by Spotify</span>
+                    </div>
+                </div>
             )}
-        </button>
+        </div>
     );
 }
 
@@ -817,9 +955,16 @@ export default function HistoryPage() {
     const [month, setMonth] = useState(now.getMonth());
     const [selectedDate, setSelectedDate] = useState(toKey(now.getFullYear(), now.getMonth(), now.getDate()));
 
-    const [history, setHistory] = useState(null);
+    const [records, setRecords] = useState([]);
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
+    const [expandedId, setExpandedId] = useState(null);
+
+    /* 좋아요 상태 + 토스트 — RecommendationPage와 동일한 로직 */
+    const [favoriteIds, setFavoriteIds] = useState(new Set());
+    const [toastVisible, setToastVisible] = useState(false);
+    const [toastMessage, setToastMessage] = useState('');
+    const [toastTimer, setToastTimer] = useState(null);
 
     const wrapCls = isMobile ? 'px-5' : isTablet ? 'px-7' : 'px-10';
 
@@ -831,11 +976,11 @@ export default function HistoryPage() {
             try {
                 const data = await getMoodHistory({ year, month: month + 1 });
                 if (!active) return;
-                setHistory(data);
+                setRecords(ensureRecordIds(data.records || []));
             } catch (err) {
                 if (!active) return;
                 setLoadError(err.message || '감정 기록을 불러오지 못했어요.');
-                setHistory(buildDummyHistory(year, month));
+                setRecords(ensureRecordIds(buildDummyRecords(year, month)));
             } finally {
                 if (active) setLoading(false);
             }
@@ -846,18 +991,109 @@ export default function HistoryPage() {
         };
     }, [year, month]);
 
+    // 선택한 날짜가 바뀌면 펼쳐둔 카드 초기화
+    useEffect(() => {
+        setExpandedId(null);
+    }, [selectedDate]);
+
+    /* 좋아요 목록 불러오기 */
+    useEffect(() => {
+        let active = true;
+        getFavorites()
+            .then((data) => {
+                if (!active) return;
+                const items = Array.isArray(data) ? data : data?.items || [];
+                setFavoriteIds(new Set(items.map((item) => item.track_id)));
+            })
+            .catch(() => {
+                if (!active) return;
+                setFavoriteIds(new Set());
+            });
+        return () => {
+            active = false;
+        };
+    }, []);
+
+    useEffect(
+        () => () => {
+            if (toastTimer) clearTimeout(toastTimer);
+        },
+        [toastTimer]
+    );
+
+    const showFavoriteToast = (message) => {
+        setToastMessage(message);
+        setToastVisible(true);
+        if (toastTimer) clearTimeout(toastTimer);
+        const timer = setTimeout(() => setToastVisible(false), 2800);
+        setToastTimer(timer);
+    };
+
+    const handleToggleLike = async (trackId, track, mood) => {
+        const isLiked = favoriteIds.has(trackId);
+        try {
+            if (isLiked) {
+                await removeFavorite(trackId);
+                setFavoriteIds((prev) => {
+                    const next = new Set(prev);
+                    next.delete(trackId);
+                    return next;
+                });
+                showFavoriteToast('좋아요가 취소되었어요');
+            } else {
+                await saveFavorite({
+                    track_id: trackId,
+                    track_name: track.name,
+                    artist_name: track.artist_name,
+                    album_name: track.album_name || null,
+                    album_image_url: track.album_image_url || null,
+                    spotify_url: track.spotify_url || null,
+                    duration_ms: track.duration_ms || null,
+                    mood: mood || null,
+                    reason: track.reason || null,
+                });
+                setFavoriteIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(trackId);
+                    return next;
+                });
+                showFavoriteToast('좋아요에 추가되었어요');
+            }
+        } catch (error) {
+            console.error('좋아요 상태를 저장하지 못했어요.', error);
+        }
+    };
+
     const recordsByDate = useMemo(() => {
         const map = {};
-        (history?.records || []).forEach((r) => {
-            map[r.date] = r;
+        records.forEach((r) => {
+            if (!map[r.date]) map[r.date] = [];
+            map[r.date].push(r);
         });
         return map;
-    }, [history]);
+    }, [records]);
 
-    const sortedRecords = useMemo(
-        () => [...(history?.records || [])].sort((a, b) => (a.date < b.date ? 1 : -1)),
-        [history]
-    );
+    // 삭제 후에도 정확하도록 요약 통계는 records에서 직접 계산
+    const summary = useMemo(() => {
+        const recordedDates = new Set(records.map((r) => r.date));
+        const moodCounts = records.reduce((acc, r) => {
+            acc[r.mood] = (acc[r.mood] || 0) + 1;
+            return acc;
+        }, {});
+        const topMood = Object.entries(moodCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+        const allVibes = records.flatMap((r) => {
+            const { vibes } = parseInputNote(r.rawText || r.text || '');
+            return r.vibes?.length ? r.vibes : vibes;
+        });
+        const vibeCounts = allVibes.reduce((acc, v) => {
+            acc[v] = (acc[v] || 0) + 1;
+            return acc;
+        }, {});
+        const topVibe = Object.entries(vibeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || null;
+
+        return { recordedDays: recordedDates.size, topMood, topVibe, moodCounts };
+    }, [records]);
 
     const handlePrevMonth = () => {
         if (month === 0) {
@@ -880,13 +1116,20 @@ export default function HistoryPage() {
         setMonth(jumpMonth);
     };
 
-    const summary = history?.summary;
-    const topMoodTheme = summary?.topMood ? getMoodTheme(summary.topMood) : null;
+    const handleDeleteRecord = (id) => {
+        setRecords((prev) => prev.filter((r) => r.id !== id));
+        setExpandedId((cur) => (cur === id ? null : cur));
+        // TODO: 백엔드 삭제 API가 준비되면 여기서 실제 삭제 요청을 보내주세요.
+        // 예: deleteMoodRecord(id).catch(() => { /* 실패 시 롤백 처리 */ });
+    };
+
+    const topMoodTheme = summary.topMood ? getMoodTheme(summary.topMood) : null;
     const moodDistribution = useMemo(() => {
-        const entries = Object.entries(summary?.moodCounts || {});
+        const entries = Object.entries(summary.moodCounts || {});
         return entries.sort((a, b) => b[1] - a[1]).slice(0, 4);
     }, [summary]);
-    const selectedRecord = recordsByDate[selectedDate] || null;
+
+    const selectedDateRecords = recordsByDate[selectedDate] || [];
 
     return (
         <div className="font-['Pretendard',-apple-system,BlinkMacSystemFont,system-ui,sans-serif] bg-[#FAF8F4] text-[#211C26] antialiased overflow-x-hidden min-h-screen">
@@ -895,6 +1138,8 @@ export default function HistoryPage() {
                 crossOrigin="anonymous"
                 href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css"
             />
+            <FavoriteToast visible={toastVisible} message={toastMessage} onClose={() => setToastVisible(false)} />
+
             <Header />
 
             <main className={`relative ${isMobile ? 'pt-[100px] pb-[72px]' : 'pt-[132px] pb-[120px]'} ${wrapCls}`}>
@@ -934,7 +1179,7 @@ export default function HistoryPage() {
                             iconBg="#ECEDFD"
                             iconColor="#7B7FF0"
                             label="이번 달 기록"
-                            value={loading ? '–' : `${summary?.recordedDays ?? 0}일`}
+                            value={loading ? '–' : `${summary.recordedDays}일`}
                         />
                         <SummaryCard
                             icon={I.bar}
@@ -949,7 +1194,7 @@ export default function HistoryPage() {
                             iconBg="#FFF3DE"
                             iconColor="#B9791E"
                             label="자주 선택한 분위기"
-                            value={loading ? '–' : summary?.topVibe || '기록 없음'}
+                            value={loading ? '–' : summary.topVibe || '기록 없음'}
                         />
                     </div>
 
@@ -970,7 +1215,9 @@ export default function HistoryPage() {
                                             className="rounded-2xl border border-[#E5DFD3] bg-white px-4 py-3"
                                         >
                                             <div className="flex items-center justify-between gap-2 mb-2">
-                                                <span className={`rounded-full px-2 py-[2px] text-[12px] font-bold ${getThemeToneClass(theme.soft, theme.color)}`}>
+                                                <span
+                                                    className={`rounded-full px-2 py-[2px] text-[12px] font-bold ${getThemeToneClass(theme.soft, theme.color)}`}
+                                                >
                                                     {theme.label}
                                                 </span>
                                                 <span className="text-[12px] font-bold text-[#211C26]">{count}회</span>
@@ -1009,36 +1256,58 @@ export default function HistoryPage() {
                             selectedDate={selectedDate}
                             onSelectDate={setSelectedDate}
                         />
-                        <SelectedDayPanel dateKey={selectedDate} record={selectedRecord} />
+                        <SelectedDayPanel
+                            dateKey={selectedDate}
+                            records={selectedDateRecords}
+                            favoriteIds={favoriteIds}
+                            onToggleLike={handleToggleLike}
+                        />
                     </div>
 
-                    {/* 최근 기록 */}
+                    {/* 선택한 날짜의 기록 목록 */}
                     <div className={`fu ${getDelayClass(0.22)}`}>
                         <div className="flex items-center justify-between mb-5">
                             <span className="inline-flex items-center gap-[6px] text-[12px] font-bold text-[#FF6B5E] uppercase tracking-[0.06em]">
                                 <Ic d={I.sparkles} size={13} color="#FF6B5E" />
                                 Recent
                             </span>
+                            {selectedDateRecords.length > 0 && (
+                                <span className="text-[12px] font-semibold text-[#A39CAC]">
+                                    {selectedDateRecords.length}건
+                                </span>
+                            )}
                         </div>
                         <h2 className="text-[19px] font-extrabold text-[#211C26] tracking-[-0.015em] mb-5">
-                            최근 기록
+                            {formatRecentHeading(selectedDate)}
                         </h2>
 
-                        {sortedRecords.length === 0 ? (
+                        {selectedDateRecords.length === 0 ? (
                             <div className="bg-white border border-[#E5DFD3] rounded-3xl p-10 text-center">
                                 <p className="text-[14px] font-semibold text-[#211C26] mb-1">
-                                    아직 기록된 감정이 없어요
+                                    {formatRecentHeading(selectedDate)}이 아직 없어요
                                 </p>
-                                <p className="text-[13px] text-[#6E6678]">감정을 기록하면 여기에 차곡차곡 쌓여요.</p>
+                                <p className="text-[13px] text-[#6E6678] mb-5">
+                                    이 날짜에 감정을 기록하면 여기에 차곡차곡 쌓여요.
+                                </p>
+                                <Link
+                                    to="/mood-input"
+                                    className="inline-flex items-center gap-2 text-[13.5px] font-bold text-white bg-[#211C26] px-5 py-3 rounded-full no-underline hover:-translate-y-px transition-transform"
+                                >
+                                    <Ic d={I.sparkles} size={15} color="#FFB648" />
+                                    감정 기록하기
+                                </Link>
                             </div>
                         ) : (
-                            <div className={`grid gap-3 ${isMobile ? 'grid-cols-1' : 'grid-cols-2'}`}>
-                                {sortedRecords.map((record) => (
-                                    <RecentRecordItem
-                                        key={record.date}
+                            <div className="flex flex-col gap-3">
+                                {selectedDateRecords.map((record) => (
+                                    <DateRecordCard
+                                        key={record.id}
                                         record={record}
-                                        isSelected={record.date === selectedDate}
-                                        onClick={() => setSelectedDate(record.date)}
+                                        isExpanded={expandedId === record.id}
+                                        onToggle={() => setExpandedId((cur) => (cur === record.id ? null : record.id))}
+                                        onDelete={handleDeleteRecord}
+                                        favoriteIds={favoriteIds}
+                                        onToggleLike={handleToggleLike}
                                     />
                                 ))}
                             </div>
