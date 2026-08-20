@@ -696,6 +696,12 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
             for facts in track_facts
         ),
     }
+    calm_anchor_count = sum(
+        bool(facts.get("low_stimulation_fit")) and not bool(facts.get("light_rhythm_fit"))
+        for facts in track_facts
+    )
+    light_rhythm_track_count = sum(bool(facts.get("light_rhythm_fit")) for facts in track_facts)
+    neutral_bridge_count = max(0, len(tracks) - calm_anchor_count - light_rhythm_track_count)
     return {
         "access_token": access_token,
         "tracks": tracks,
@@ -711,6 +717,9 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
             "diversity_candidate_pool_multiplier": 3,
             "selected_categories": selected_categories,
             "focus_coverage": focus_coverage,
+            "calm_anchor_count": calm_anchor_count,
+            "light_rhythm_track_count": light_rhythm_track_count,
+            "neutral_bridge_count": neutral_bridge_count,
             "retrieved_candidate_count": retrieved_candidate_count,
             "ranked_candidate_count": ranked_candidate_count,
             "selected_tracks_before_validation_count": selected_count_before_validation,

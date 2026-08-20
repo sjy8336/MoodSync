@@ -603,7 +603,7 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "Fix You", "artist_name": "Coldplay", "moods": ["sad", "anxious"], "tags": ["soft", "emotional"]},
     {"name": "To Build a Home", "artist_name": "The Cinematic Orchestra", "moods": ["sad", "lonely"], "tags": ["soft", "dreamy"]},
     {"name": "Love Poem", "artist_name": "IU", "moods": ["sad", "lonely", "anxious"], "tags": ["korean", "soft", "emotional", "comfort"]},
-    {"name": "Through the Night", "artist_name": "IU", "moods": ["sad", "lonely", "anxious", "calm"], "tags": ["korean", "soft", "calm", "comfort"]},
+    {"name": "Through the Night", "artist_name": "IU", "moods": ["sad", "lonely", "anxious", "calm"], "tags": ["korean", "soft", "calm", "comfort", "prominent_vocal"]},
     {"name": "Best Part", "artist_name": "Daniel Caesar feat. H.E.R.", "moods": ["sad", "lonely", "anxious", "calm"], "tags": ["rnb", "soul", "soft", "warm", "love", "prominent_vocal"]},
     {"name": "Like I'm Gonna Lose You", "artist_name": "Meghan Trainor feat. John Legend", "moods": ["sad", "lonely", "anxious"], "tags": ["pop", "soft", "emotional", "warm", "love"]},
     {"name": "Ditto", "artist_name": "NewJeans", "moods": ["lonely", "calm", "anxious"], "tags": ["korean", "dreamy"]},
@@ -2560,7 +2560,11 @@ def _fallback_tracks(
     # Soft RAG guidance ranks the catalog; it must not shrink the candidate
     # pool below the requested count. Hard constraints are still applied by
     # _select_fallback_catalog and validate_hard_constraints.
-    catalog_limit = len(FALLBACK_LIBRARY) if (not access_token or cover_can_expand_candidates) else limit
+    catalog_limit = len(FALLBACK_LIBRARY) if (
+        not access_token
+        or cover_can_expand_candidates
+        or _is_long_focus_request(context_text)
+    ) else limit
     catalog = _select_fallback_catalog(mood, context_text, catalog_limit, selection_guidance, recent_track_keys)
     if not access_token:
         tracks = [
