@@ -311,6 +311,11 @@ def _is_calm_jazz_instrument_request(context_text: str | None) -> bool:
     )
 
 
+def _requests_unhurried_flow(context_text: str | None) -> bool:
+    text = context_text or ""
+    return any(token in text.lower() for token in ("천천히", "느긋", "서두르지", "여유 있는", "자극적이지"))
+
+
 def _is_dawn_sentimental_request(context_text: str | None) -> bool:
     """Recognize a late-night listening aesthetic without treating it as sleep."""
     text = context_text or ""
@@ -397,6 +402,42 @@ def _build_contextual_reason_facts(name: str, artist_name: str, context_text: st
         )
         if factors:
             facts["sleep_ranking_factors"] = factors
+    if _is_calm_jazz_instrument_request(context_text):
+        tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
+        facts["low_stimulation_fit"] = bool(tags & {"low_stimulation", "relaxed", "subdued"})
+        facts["relaxed_flow_fit"] = bool("relaxed" in tags or "low_stimulation" in tags)
+        facts["calm_fit"] = bool("calm" in {str(mood).lower() for mood in facts.get("moods", []) if mood} or "calm" in tags)
+        facts["jazz_ranking_factors"] = [
+            label
+            for label, present in (
+                ("jazz", "jazz" in tags),
+                ("requested_instruments_catalog_match", {"piano", "saxophone"}.issubset(tags)),
+                ("low_stimulation", "low_stimulation" in tags),
+                ("relaxed_flow", "relaxed" in tags),
+                ("rhythmic_strong_penalty", bool(tags & {"rhythmic_strong", "hard-bop", "fusion", "swing"})),
+            )
+            if present
+        ]
+    return facts
+
+
+def _attach_spotify_recording_facts(facts: dict[str, object], track: TrackSummary) -> dict[str, object]:
+    """Keep catalog tags useful for ranking without presenting them as recording facts."""
+    enriched = dict(facts)
+    enriched["recording_identity_source"] = "spotify_title_artist_match"
+    enriched["instrumentation_verification"] = "unknown"
+    enriched["recording_instruments"] = []
+    enriched.setdefault("feature_provenance", {})["instruments"] = "not_available_from_spotify_track_response"
+    if track.spotify_track_name and track.album_name:
+        enriched["canonical_recording_identity"] = f"{track.spotify_track_name} — {track.artist_name} — {track.album_name}"
+    return enriched
+
+
+def _build_candidate_reason_facts(
+    item: dict[str, object], context_text: str | None, mood: str
+) -> dict[str, object]:
+    facts = _build_contextual_reason_facts(str(item["name"]), str(item["artist_name"]), context_text)
+    facts["final_ranking_score"] = _score_fallback_candidate(item, mood, context_text)
     return facts
 
 
@@ -752,6 +793,47 @@ def _has_explicit_genre_request(context_text: str | None) -> bool:
     return bool(explicit_genres or genre_labels)
 
 
+def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) -> dict[str, object]:
+    """Expose request-isolation facts without carrying state between requests."""
+    explicit_genres, _, _ = _extract_genre_family_matches(context_text)
+    current_genre = explicit_genres[0] if explicit_genres else None
+    selected_tracks = []
+    for track in tracks:
+        facts = track.reason_facts or {}
+        selected_tracks.append({
+            "display_title": track.display_title or track.name,
+            "artist": track.artist_name,
+            "album": track.album_name,
+            "spotify_track_id": track.track_id if not track.track_id.startswith("fallback-") else None,
+            "canonical_recording_identity": track.canonical_recording_identity or facts.get("canonical_recording_identity"),
+            "recording_match_confidence": track.recording_match_confidence,
+            "actual_instruments": facts.get("recording_instruments") or [],
+            "piano": "piano" in set(facts.get("recording_instruments") or []),
+            "saxophone": "saxophone" in set(facts.get("recording_instruments") or []),
+            "instrumentation_source": track.instrumentation_source or facts.get("instrumentation_verification") or "unknown",
+            "low_stimulation_fit": facts.get("low_stimulation_fit"),
+            "relaxed_flow_fit": facts.get("relaxed_flow_fit"),
+            "calm_fit": facts.get("calm_fit"),
+            "final_ranking_score": facts.get("final_ranking_score"),
+        })
+    return {
+        "previous_request_genre": None,
+        "current_request_genre": current_genre,
+        "genre_state_reset": True,
+        "previous_candidate_pool_reused": False,
+        "current_retrieval_query": (
+            explicit_genres[:5] if explicit_genres else ["genre_neutral_focus_catalog"]
+        ),
+        "genre_ranking_weights": (
+            {"explicit_genre": 1.0}
+            if explicit_genres
+            else {"low_stimulation": 1.0, "sustained_focus": 1.0, "calm": 0.9, "light_rhythm": 0.7}
+        ),
+        "selected_track_count": len(tracks),
+        "selected_tracks": selected_tracks,
+    }
+
+
 def _merge_context_audio_hints(context_text: str | None) -> tuple[list[str], dict[str, object]]:
     genres: list[str] = []
     params: dict[str, object] = {}
@@ -780,6 +862,7 @@ def _pick_seed_genres(
 ) -> list[str]:
     profile = MOOD_PROFILES.get(mood, MOOD_PROFILES["calm"])
     explicit_genres, _, _ = _extract_genre_family_matches(context_text)
+    explicit_genre_set = set(explicit_genres)
     if explicit_genres:
         if available_genres:
             filtered = [genre for genre in explicit_genres if genre in available_genres]
@@ -827,22 +910,32 @@ def _map_track(track: dict, mood_label: str, seed_genres: list[str]) -> TrackSum
     chosen_seed = seed_genres[0] if seed_genres else "mood"
     duration_ms = track.get("duration_ms")
     reason = f"{mood_label} 분위기와 잘 맞는 {chosen_seed} 계열 트랙이에요."
+    spotify_name = str(track.get("name") or "Unknown Track")
+    album_name = album.get("name")
+    identity = f"{spotify_name} — {primary_artist} — {album_name}" if album_name else None
+    reason_facts = {
+        **_build_reason_facts(spotify_name, str(primary_artist), seed_genres),
+        **({"popularity": track["popularity"]} if isinstance(track.get("popularity"), int) else {}),
+        "recording_identity_source": "spotify_title_artist_match",
+        "instrumentation_verification": "unknown",
+        "recording_instruments": [],
+    }
 
     return TrackSummary(
         track_id=str(track.get("id") or track.get("uri") or track.get("name")),
-        name=str(track.get("name") or "Unknown Track"),
+        name=spotify_name,
         artist_name=str(primary_artist),
         display_title=str(track.get("name") or "Unknown Track"),
-        spotify_track_name=str(track.get("name") or "Unknown Track"),
-        album_name=album.get("name"),
+        spotify_track_name=spotify_name,
+        canonical_recording_identity=identity,
+        recording_match_confidence=0.8,
+        instrumentation_source="not_available_from_spotify_track_response",
+        album_name=album_name,
         album_image_url=album_image_url,
         spotify_url=spotify_url,
         preview_url=track.get("preview_url"),
         duration_ms=duration_ms if isinstance(duration_ms, int) else None,
-        reason_facts={
-            **_build_reason_facts(str(track.get("name") or "Unknown Track"), str(primary_artist), seed_genres),
-            **({"popularity": track["popularity"]} if isinstance(track.get("popularity"), int) else {}),
-        },
+        reason_facts=reason_facts,
         reason=reason,
     )
 
@@ -1154,12 +1247,17 @@ def build_recommendation_message(
             )
             for facts in track_facts
         )
-        if all_jazz and piano_sax_count >= max(1, len(track_facts) // 2):
+        verified_piano_sax_count = sum(
+            facts.get("instrumentation_verification") == "recording_metadata"
+            and {"piano", "saxophone"}.issubset(set(facts.get("recording_instruments") or []))
+            for facts in track_facts
+        )
+        if all_jazz and verified_piano_sax_count >= max(1, len(track_facts) // 2):
             return (
                 "오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 골라봤어요. "
-                "피아노와 색소폰이 확인되는 연주곡을 중심으로, 자극이 비교적 적은 분위기를 담았어요."
+                "피아노와 색소폰이 실제 녹음 정보로 확인되는 곡들을 중심으로 담았어요."
             )
-        return "오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 중심으로 골라봤어요."
+        return "오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 중심으로 골라봤어요. 실제 녹음의 악기 정보가 확인되지 않은 곡은 악기를 추정하지 않았어요."
 
     if study_flow_request and avoids_overstimulation:
         return "지금의 좋은 집중 흐름은 유지하면서도 너무 과하지 않게 활기를 더할 수 있는 곡들을 골라봤어요."
@@ -1308,6 +1406,18 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
     ][index % 2]
 
 
+def _calm_jazz_role_without_instrumentation(index: int) -> str:
+    sentences = (
+        "오늘처럼 조금 지친 상태에서 자극적인 음악보다 차분하게 듣고 싶을 때 잘 맞아요.",
+        "연주를 천천히 따라가며 여유 있는 시간을 보내고 싶을 때 잘 어울려요.",
+        "강한 자극보다 느긋한 재즈를 찾는 순간에 듣기 좋아요.",
+        "긴장이 남아 있어 서두르지 않는 음악을 듣고 싶을 때 잘 맞아요.",
+        "감성적인 재즈를 차분하게 듣고 싶은 순간에 어울려요.",
+        "재즈의 흐름을 부담 없이 이어 듣고 싶을 때 잘 맞아요.",
+    )
+    return sentences[index % len(sentences)]
+
+
 def _tag_feature_sentence(
     track_tags: list[str], tag_labels: dict[str, str], variant_index: int = 0
 ) -> str | None:
@@ -1422,7 +1532,9 @@ def _focus_feature_sentence(track_tags: list[str], track_moods: list[str]) -> st
 
 def _jazz_instrument_feature_sentence(track_facts: dict[str, object]) -> str | None:
     tags = {str(tag).lower() for tag in track_facts.get("tags", []) if tag}
-    instruments = set(str(item).lower() for item in track_facts.get("instruments", []) if item)
+    if track_facts.get("instrumentation_verification") != "recording_metadata":
+        return _jazz_catalog_feature_sentence(tags)
+    instruments = set(str(item).lower() for item in track_facts.get("recording_instruments", []) if item)
     if {"piano", "saxophone"}.issubset(instruments) and "jazz" in tags:
         if "low_stimulation" in tags or "relaxed" in tags:
             return "피아노와 색소폰이 함께하는 차분한 재즈 연주곡이에요."
@@ -1431,6 +1543,21 @@ def _jazz_instrument_feature_sentence(track_facts: dict[str, object]) -> str | N
         return "색소폰이 중심이 되는 재즈 연주곡이에요."
     if "piano" in instruments and "jazz" in tags:
         return "피아노가 중심이 되는 차분한 재즈 연주곡이에요."
+    return None
+
+
+def _jazz_catalog_feature_sentence(tags: set[str]) -> str | None:
+    """Describe only catalog-level genre/mood facts when recording instruments are unknown."""
+    if "bossa-nova" in tags:
+        return "보사노바 계열의 여유 있는 재즈 분위기가 이어지는 곡이에요."
+    if "hard-bop" in tags:
+        return "하드 밥 계열의 리듬감이 분명한 재즈 곡이에요."
+    if "low_stimulation" in tags and "relaxed" in tags:
+        return "차분하고 여유 있는 재즈 분위기가 이어지는 곡이에요."
+    if "relaxed" in tags:
+        return "여유 있는 흐름의 재즈 연주곡이에요."
+    if "jazz" in tags:
+        return "재즈 연주가 중심인 곡이에요."
     return None
 
 
@@ -1537,7 +1664,12 @@ def build_track_reason(
     if _is_calm_jazz_instrument_request(context_text):
         jazz_feature = _jazz_instrument_feature_sentence(facts)
         if jazz_feature:
-            return f"{jazz_feature} {_role_listening_sentence(recommendation_role, index)}"
+            role_sentence = (
+                _calm_jazz_role_without_instrumentation(index)
+                if facts.get("instrumentation_verification") != "recording_metadata"
+                else _role_listening_sentence(recommendation_role, index)
+            )
+            return f"{jazz_feature} {role_sentence}"
     if _is_dawn_sentimental_request(context_text):
         dawn_feature = _dawn_sentimental_feature_sentence(track_tags, recommendation_role)
         if dawn_feature:
@@ -1780,7 +1912,10 @@ def _search_track(access_token: str, name: str, artist_name: str, reason: str) -
             if album_image_url or spotify_url:
                 mapped = _map_track(track, artist_name, [name])
                 if _canonical_track_token(mapped.name) in accepted_titles and _canonical_track_token(mapped.artist_name) in accepted_artists:
-                    mapped.reason_facts = _build_reason_facts(name, artist_name)
+                    mapped.reason_facts = _attach_spotify_recording_facts(
+                        _build_reason_facts(name, artist_name),
+                        mapped,
+                    )
                     mapped.reason = reason
                     return mapped
 
@@ -1841,6 +1976,7 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
     sleep_request = _is_sleep_request(context_text)
     long_focus_request = _is_long_focus_request(context_text)
     calm_jazz_instrument_request = _is_calm_jazz_instrument_request(context_text)
+    unhurried_flow_request = _requests_unhurried_flow(context_text)
     dawn_sentimental_request = _is_dawn_sentimental_request(context_text)
     mbti_aesthetic = detect_mbti_aesthetic(context_text)
     family_trip_request = _is_family_trip_request(context_text)
@@ -1942,6 +2078,11 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
             score -= 24
         if "upbeat" in candidate_tags:
             score -= 8
+        if not explicit_genre_set:
+            if candidate_tags & {"soft", "ambient", "dreamy", "groove", "instrumental"}:
+                score += 8
+            if candidate_tags & {"hard-bop", "fusion", "swing", "big-band", "rhythmic_strong"}:
+                score -= 16
     if calm_jazz_instrument_request:
         if "jazz" in candidate_tags:
             score += 18
@@ -1951,6 +2092,11 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
             score += 18
         if candidate_tags & {"hard-bop", "fusion", "swing", "big-band", "rhythmic_strong", "high_energy"}:
             score -= 20
+        if unhurried_flow_request:
+            if candidate_tags & {"low_stimulation", "relaxed", "subdued"}:
+                score += 20
+            if candidate_tags & {"hard-bop", "fusion", "swing", "big-band", "rhythmic_strong", "high_energy"}:
+                score -= 18
     if dawn_sentimental_request:
         # This request seeks mood congruence, not emotional regulation. Favor
         # verified dreamy and sentimental cues while keeping the playlist low-key.
@@ -2028,6 +2174,7 @@ def _select_fallback_catalog(
             if "instrumental" in {str(tag).lower() for tag in candidate.get("tags", []) if tag}
         ]
     explicit_genres, _, _ = _extract_genre_family_matches(context_text)
+    explicit_genre_set = set(explicit_genres)
     if explicit_genres:
         exact_genre = [
             candidate
@@ -2072,6 +2219,12 @@ def _select_fallback_catalog(
             )
             and not {"high_energy", "driving", "aggressive", "busy"}.intersection(
                 {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+            )
+            and not (
+                not explicit_genre_set
+                and {"hard-bop", "fusion", "swing", "big-band", "rhythmic_strong"}.intersection(
+                    {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+                )
             )
         ]
         if len(focus_candidates) >= limit:
@@ -2162,6 +2315,8 @@ def _select_fallback_catalog(
     generation_counts: dict[str, int] = {}
     diversify_family_trip = _is_family_trip_request(context_text)
     diversify_korean_band_rock = _prefers_korean_band_rock(context_text)
+    diversify_focus_genres = _is_long_focus_request(context_text) and not explicit_genre_set
+    focus_genre_counts: dict[str, int] = {}
     for candidate in ranked:
         key = (str(candidate.get("name") or ""), str(candidate.get("artist_name") or ""))
         if key in seen:
@@ -2169,6 +2324,18 @@ def _select_fallback_catalog(
         artist_key = str(candidate.get("artist_name") or "").strip().lower()
         if (diversify_family_trip or diversify_korean_band_rock) and artist_key in seen_artists:
             continue
+        if diversify_focus_genres:
+            candidate_tags = {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+            candidate_genre = next(
+                (
+                    genre
+                    for genre in ("jazz", "classical", "rnb", "hip-hop", "ambient", "electronic", "indie", "pop")
+                    if genre in candidate_tags
+                ),
+                "other",
+            )
+            if focus_genre_counts.get(candidate_genre, 0) >= 3:
+                continue
         generation = str(candidate.get("generation") or "unspecified")
         # Family familiarity is playlist-level: do not let a single age group
         # consume most of the six slots merely because its songs score highest.
@@ -2177,7 +2344,11 @@ def _select_fallback_catalog(
             continue
         seen.add(key)
         seen_artists.add(artist_key)
-        unique.append(candidate)
+        selected_candidate = dict(candidate)
+        selected_candidate["final_ranking_score"] = _score_fallback_candidate(candidate, mood, context_text)
+        unique.append(selected_candidate)
+        if diversify_focus_genres:
+            focus_genre_counts[candidate_genre] = focus_genre_counts.get(candidate_genre, 0) + 1
         generation_counts[generation] = generation_counts.get(generation, 0) + 1
         if len(unique) >= limit:
             break
@@ -2211,7 +2382,7 @@ def _fallback_tracks(
                 artist_name=str(item["artist_name"]),
                 display_title=str(item["name"]),
                 spotify_search_title=_spotify_search_title(str(item["name"]), str(item["artist_name"])),
-                reason_facts=_build_contextual_reason_facts(str(item["name"]), str(item["artist_name"]), context_text),
+                reason_facts=_build_candidate_reason_facts(item, context_text, mood),
                 reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                 spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
             )
@@ -2244,7 +2415,13 @@ def _fallback_tracks(
                         "display_title": display_name,
                         "spotify_search_title": _spotify_search_title(display_name, display_artist),
                         "spotify_track_name": track.spotify_track_name or track.name,
-                        "reason_facts": _build_contextual_reason_facts(display_name, display_artist, context_text),
+                        "canonical_recording_identity": track.canonical_recording_identity,
+                        "recording_match_confidence": track.recording_match_confidence,
+                        "instrumentation_source": track.instrumentation_source,
+                        "reason_facts": _attach_spotify_recording_facts(
+                            _build_contextual_reason_facts(display_name, display_artist, context_text),
+                            track,
+                        ),
                     }
                 )
                 resolved.append(enriched_track)
@@ -2264,7 +2441,7 @@ def _fallback_tracks(
                     artist_name=str(item["artist_name"]),
                     display_title=str(item["name"]),
                     spotify_search_title=_spotify_search_title(str(item["name"]), str(item["artist_name"])),
-                    reason_facts=_build_contextual_reason_facts(str(item["name"]), str(item["artist_name"]), context_text),
+                    reason_facts=_build_candidate_reason_facts(item, context_text, mood),
                     reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                     spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
                 )
@@ -2278,7 +2455,7 @@ def _fallback_tracks(
                 artist_name=str(item["artist_name"]),
                 display_title=str(item["name"]),
                 spotify_search_title=_spotify_search_title(str(item["name"]), str(item["artist_name"])),
-                reason_facts=_build_contextual_reason_facts(str(item["name"]), str(item["artist_name"]), context_text),
+                reason_facts=_build_candidate_reason_facts(item, context_text, mood),
                 reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                 spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
             )

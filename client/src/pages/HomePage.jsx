@@ -403,7 +403,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#FFB648',
                 albumName: 'Time Out',
                 durationMs: 324000,
-                reason: '집중을 깨지 않으면서도 리듬감을 살려줘요.',
+                reason: '재즈 특유의 리듬감이 또렷하면서도 비교적 안정적으로 이어지는 곡이에요. 너무 조용하지 않은 음악을 들으며 집중하고 싶을 때 잘 맞아요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
             {
@@ -416,7 +416,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#FFB648',
                 albumName: 'Kind of Blue',
                 durationMs: 337000,
-                reason: '과하게 흔들지 않고 몰입을 이어가게 해줘요.',
+                reason: '차분하고 여유로운 피아노와 트럼펫의 분위기가 이어지는 곡이에요. 생각이 많을 때 배경을 복잡하게 만들지 않는 음악을 듣고 싶다면 잘 어울려요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
             {
@@ -429,7 +429,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#FFB648',
                 albumName: 'Empyrean Isles',
                 durationMs: 308000,
-                reason: '집중 상태를 유지하면서도 그루브를 조금 더해줘요.',
+                reason: '재즈의 그루브와 반복되는 리듬이 비교적 선명하게 느껴지는 곡이에요. 집중하는 흐름에 약간의 활기를 더하고 싶을 때 듣기 좋아요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
         ],
@@ -468,7 +468,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#7B7FF0',
                 albumName: 'The Essential Benny Goodman',
                 durationMs: 515000,
-                reason: '스윙의 활기와 큰 편성이 바로 느껴져요.',
+                reason: '큰 편성의 스윙 리듬과 브라스가 밝고 활기차게 느껴지는 곡이에요. 지친 기분을 가볍게 환기하며 재즈를 듣고 싶을 때 잘 맞아요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
             {
@@ -481,7 +481,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#7B7FF0',
                 albumName: 'Page One',
                 durationMs: 250000,
-                reason: '보사노바와 재즈의 결이 부드럽게 이어져요.',
+                reason: '보사노바의 여유로운 리듬과 재즈의 즉흥적인 결이 함께 느껴지는 곡이에요. 복잡하지 않은 분위기에서 잠시 숨을 고르고 싶을 때 어울려요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
             {
@@ -494,7 +494,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#7B7FF0',
                 albumName: 'Heavy Weather',
                 durationMs: 355000,
-                reason: '퓨전 재즈의 전개를 바로 테스트하기 좋아요.',
+                reason: '록에 가까운 추진력과 재즈의 복잡한 앙상블이 함께 느껴지는 퓨전 재즈 곡이에요. 차분한 곡만 이어 듣기보다 조금 더 선명한 변화를 원할 때 듣기 좋아요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
         ],
@@ -533,7 +533,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#FF6B5E',
                 albumName: 'TALKING IS HARD',
                 durationMs: 199000,
-                reason: '도로 위에서 바로 따라 부르기 좋은 에너지로 출발을 올려줘요.',
+                reason: '밝은 기타 리프와 반복되는 팝 록 후렴이 경쾌하게 이어지는 곡이에요. 이동을 시작하며 분위기를 가볍게 띄우고 싶을 때 잘 맞아요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
             {
@@ -546,7 +546,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#FF6B5E',
                 albumName: 'Uptown Special',
                 durationMs: 270000,
-                reason: '펑키한 리듬이 지루한 고속도로 구간도 신나게 바꿔줘요.',
+                reason: '펑키한 베이스와 타이트한 리듬이 선명하게 느껴지는 곡이에요. 함께 듣는 사람들과 차 안의 분위기를 생생하게 만들고 싶을 때 어울려요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
             {
@@ -559,7 +559,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#FF6B5E',
                 albumName: 'After Hours',
                 durationMs: 200000,
-                reason: '신스팝 비트가 야간 드라이브의 속도감과 잘 맞아요.',
+                reason: '반복되는 신스팝 비트와 복고적인 질감이 강하게 드러나는 곡이에요. 익숙한 리듬을 따라가며 이동 시간을 즐기고 싶을 때 듣기 좋아요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
         ],
@@ -598,7 +598,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#7B7FF0',
                 albumName: "Hurry Up, We're Dreaming",
                 durationMs: 244000,
-                reason: '신스 사운드가 낯선 도시를 걷는 듯한 몽환적인 몰입을 만들어줘요.',
+                reason: '반짝이는 신스 사운드와 반복되는 리듬이 도시적인 몽환을 만들어내는 곡이에요. 현실의 속도에서 잠시 벗어난 듯한 음악을 듣고 싶을 때 잘 맞아요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
             {
@@ -611,7 +611,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#7B7FF0',
                 albumName: 'Violator',
                 durationMs: 252000,
-                reason: '어두운 신스와 반복되는 비트가 깊은 분위기를 더해줘요.',
+                reason: '어두운 신스 질감과 절제된 반복 비트가 차분하게 이어지는 곡이에요. 말없이 분위기에 머물며 음악을 듣고 싶을 때 어울려요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
             {
@@ -624,7 +624,7 @@ const DEMO_HOME_SNAPSHOTS = {
                 moodColor: '#7B7FF0',
                 albumName: 'Conditions',
                 durationMs: 231000,
-                reason: '점층적으로 커지는 기타와 보컬이 영화 같은 장면을 연출해줘요.',
+                reason: '점층적으로 커지는 기타와 넓게 펼쳐지는 보컬이 인상적인 곡이에요. 한 장면처럼 천천히 분위기가 변하는 음악을 원할 때 듣기 좋아요.',
                 spotifyUrl: 'https://open.spotify.com',
             },
         ],
@@ -773,7 +773,7 @@ const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
             <div className="flex items-center gap-2 px-4 py-[8px] border-t border-[#EEEBE4]">
                 <Ic d={I.bulb} size={12} color="#7B7FF0" className="shrink-0 mt-[1px]" />
                 <p className="text-[11.5px] text-[#A39CAC] leading-snug m-0">
-                    {track.mood} 감정일 때 잘 어울리는 곡으로 추천됐어요.
+                    {track.reason || `${track.mood} 감정에 맞춰 지금 분위기와 어울리는 곡으로 골랐어요.`}
                 </p>
             </div>
         </div>

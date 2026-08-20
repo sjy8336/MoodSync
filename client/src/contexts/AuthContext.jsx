@@ -11,6 +11,13 @@ const defaultAuthValue = {
 };
 
 const AuthContext = createContext(defaultAuthValue);
+const RECOMMENDATION_STORAGE_KEY = 'mood-sync:last-recommendation';
+
+const clearRecommendationCache = () => {
+    if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem(RECOMMENDATION_STORAGE_KEY);
+    }
+};
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
@@ -46,11 +53,13 @@ export function AuthProvider({ children }) {
 
     const login = (nextUser) => {
         const normalized = normalizeAuthUser(nextUser);
+        clearRecommendationCache();
         setUser(normalized);
         setStoredAuthUser(normalized);
     };
 
     const logout = () => {
+        clearRecommendationCache();
         setUser(null);
         clearStoredAuthUser();
     };

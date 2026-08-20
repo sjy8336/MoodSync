@@ -31,6 +31,7 @@ from app.services.spotify_service import (
     _search_track,
     _korean_band_rock_preference_strength,
     _select_fallback_catalog,
+    build_selection_debug,
     build_recommendation_message,
     build_track_reason,
     extract_hard_constraints,
@@ -41,6 +42,20 @@ from app.services.spotify_service import (
 
 
 class GeminiRecommendationCopyTests(unittest.TestCase):
+    def test_focus_request_resets_genre_and_does_not_reuse_jazz_pool(self) -> None:
+        text = (
+            "오늘은 노트북 앞에서 오래 앉아 있을 예정이라, 너무 산만하지 않고 "
+            "몰입이 이어지는 음악이 필요해요. 잔잔하지만 리듬감은 조금 있었으면 좋겠어요."
+        )
+        catalog = _select_fallback_catalog("focused", text, 6)
+        debug = build_selection_debug(text, [])
+        jazz_count = sum("jazz" in set(item.get("tags", [])) for item in catalog)
+
+        self.assertIsNone(debug["current_request_genre"])
+        self.assertTrue(debug["genre_state_reset"])
+        self.assertFalse(debug["previous_candidate_pool_reused"])
+        self.assertLessEqual(jazz_count, 3)
+
     def test_long_focus_request_does_not_use_break_role_or_study_context(self) -> None:
         text = (
             "오늘은 노트북 앞에서 오래 앉아 있을 예정이라, 너무 산만하지 않고 "
@@ -66,6 +81,21 @@ class GeminiRecommendationCopyTests(unittest.TestCase):
         self.assertTrue(
             all({"piano", "saxophone"}.issubset(set(item.get("tags", []))) for item in catalog)
         )
+
+    def test_jazz_reasons_do_not_claim_unverified_recording_instruments(self) -> None:
+        text = (
+            "오늘은 조금 지쳐서 재즈를 듣고 싶어요. 너무 자극적이지 않고, "
+            "피아노와 색소폰이 천천히 흐르면서 긴장을 풀어주는 곡이면 좋겠어요."
+        )
+        tracks = recommend_tracks("tired", context_text=text)
+        reasons = [
+            build_track_reason(track, "tired", text, index, _recommendation_role("tired", index, text, reason_facts=track.reason_facts))
+            for index, track in enumerate(tracks)
+        ]
+
+        self.assertTrue(all(track.reason_facts.get("instrumentation_verification") is None for track in tracks))
+        self.assertTrue(all("피아노와 색소폰" not in reason for reason in reasons))
+        self.assertTrue(all(track.reason_facts.get("jazz_ranking_factors") for track in tracks))
 
     def test_korean_band_rock_request_prefers_verified_local_band_catalog(self) -> None:
         text = "오늘 너무 화나는 일이 있었어서 스트레스 풀고 싶어. 우리나라 밴드 락음악 위주로 추천해줘."

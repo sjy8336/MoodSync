@@ -36,6 +36,7 @@ from app.services.spotify_service import (
     _enforce_korean_band_rock_selection,
     _is_korean_band_rock_track,
     _korean_band_rock_preference_strength,
+    build_selection_debug,
     _split_context,
     build_recommendation_message,
     build_track_reason,
@@ -630,6 +631,7 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
         "access_token": access_token,
         "tracks": tracks,
         "selection_profile": {
+            **build_selection_debug(state["payload"].text, tracks),
             "korean_band_rock_preference": korean_band_rock_preference,
             "korean_band_rock_exact_count": len(exact_korean_band_rock_tracks),
             "non_matching_track_count": len(tracks) - len(exact_korean_band_rock_tracks),

@@ -616,7 +616,6 @@ function TrackRow({ track, index, mood, liked, onToggleLike, theme }) {
                 >
                     {track.artist_name}
                 </a>
-                {track.reason && <p className="mt-1 text-[12px] leading-[1.55] text-[#6E6678]">{track.reason}</p>}
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
