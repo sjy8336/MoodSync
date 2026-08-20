@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from functools import lru_cache
+import logging
 import re
 from typing import Any, TypedDict, cast
 
@@ -45,6 +46,8 @@ from app.services.spotify_service import (
     recommend_tracks,
     validate_hard_constraints,
 )
+
+logger = logging.getLogger(__name__)
 
 try:  # pragma: no cover - optional dependency path
     from langgraph.graph import END, START, StateGraph
@@ -218,10 +221,31 @@ def _uses_formal_recommendation_style(reason: str) -> bool:
 
 
 def _has_incomplete_reason_sentence(reason: str) -> bool:
-    cleaned = reason.strip()
-    if not cleaned or not cleaned.endswith((".", "요.", "다.")):
+    cleaned = re.sub(r"\s+", " ", reason.strip()).strip('"\'')
+    if not cleaned:
         return True
-    return any(cleaned.endswith(fragment) for fragment in ("고 싶을", "할 때,", "하며", "하고"))
+
+    # Gemini can return syntactically valid JSON while the final Korean
+    # sentence is still cut off at the output limit. Check grammar, not only
+    # JSON validity, so the track can use its local fallback reason.
+    incomplete_endings = (
+        "고 싶을",
+        "할 때,",
+        "하면서",
+        "하며",
+        "하고",
+        "이고",
+        "이며",
+        "이",
+        "가",
+        "을",
+        "를",
+        "에",
+    )
+    if cleaned.endswith(incomplete_endings):
+        return True
+
+    return not bool(re.search(r"(?:요|이에요|해요|맞아요|어울려요|좋아요|됩니다|있어요)[.!?]?$", cleaned))
 
 
 def _leaks_long_focus_context(reason: str, input_text: str) -> bool:
@@ -765,6 +789,22 @@ def _compose_copy_and_track_reasons(state: RecommendationWorkflowState) -> dict[
         else build_recommendation_message(mood, input_text, len(tracks), tracks)
     )
     enriched_tracks, reason_map = _apply_recommendation_copy(tracks, recommendation_copy, mood, input_text)
+    parsed_reason_count = len(
+        recommendation_copy.get("track_reasons", [])
+        if isinstance(recommendation_copy, dict)
+        else []
+    )
+    fallback_reason_count = len(enriched_tracks) - len(reason_map)
+    logger.info(
+        "[Mood Sync] recommendation reason pipeline input/parsed/accepted/stored/rendered counts: "
+        "tracks=%s parsed=%s accepted=%s stored=%s rendered=%s fallback=%s",
+        len(tracks),
+        parsed_reason_count,
+        len(reason_map),
+        len(enriched_tracks),
+        len(enriched_tracks),
+        fallback_reason_count,
+    )
     return {
         "recommendation_copy": recommendation_copy,
         "message": message,
@@ -780,9 +820,12 @@ def _compose_copy_and_track_reasons(state: RecommendationWorkflowState) -> dict[
             "gemini_copy_attempted": gemini_copy_attempted,
             "gemini_copy_succeeded": bool(recommendation_copy),
             "gemini_reason_count": len(reason_map),
-            "parsed_reason_count": len(reason_map),
-            "fallback_reason_used": len(reason_map) < len(enriched_tracks),
-            "fallback_reason_count": len(enriched_tracks) - len(reason_map),
+            "parsed_reason_count": parsed_reason_count,
+            "accepted_reason_count": len(reason_map),
+            "stored_reason_count": len(enriched_tracks),
+            "rendered_reason_count": len(enriched_tracks),
+            "fallback_reason_used": fallback_reason_count > 0,
+            "fallback_reason_count": fallback_reason_count,
             "final_track_count": len(enriched_tracks),
             "rendered_card_count": len(enriched_tracks),
             "gemini_copy_error": gemini_copy_error,
@@ -859,6 +902,22 @@ def complete_recommendation_copy(recommendation_id: int) -> None:
             copy_error = "Gemini returned no usable recommendation copy"
 
         enriched_tracks, reason_map = _apply_recommendation_copy(tracks, recommendation_copy, recommendation.mood, input_text)
+        parsed_reason_count = len(
+            recommendation_copy.get("track_reasons", [])
+            if isinstance(recommendation_copy, dict)
+            else []
+        )
+        fallback_reason_count = len(enriched_tracks) - len(reason_map)
+        logger.info(
+            "[Mood Sync] deferred recommendation reason pipeline input/parsed/accepted/stored/rendered counts: "
+            "tracks=%s parsed=%s accepted=%s stored=%s rendered=%s fallback=%s",
+            len(tracks),
+            parsed_reason_count,
+            len(reason_map),
+            len(enriched_tracks),
+            len(enriched_tracks),
+            fallback_reason_count,
+        )
         if recommendation_copy and _is_safe_recommendation_message(
             recommendation_copy.get("message"),
             input_text,
@@ -874,8 +933,11 @@ def complete_recommendation_copy(recommendation_id: int) -> None:
                 "gemini_copy_attempted": True,
                 "gemini_copy_succeeded": bool(recommendation_copy),
                 "gemini_reason_count": len(reason_map),
-                "parsed_reason_count": len(reason_map),
-                "fallback_reason_count": len(enriched_tracks) - len(reason_map),
+                "parsed_reason_count": parsed_reason_count,
+                "accepted_reason_count": len(reason_map),
+                "stored_reason_count": len(enriched_tracks),
+                "rendered_reason_count": len(enriched_tracks),
+                "fallback_reason_count": fallback_reason_count,
                 "final_track_count": len(enriched_tracks),
                 "rendered_card_count": len(enriched_tracks),
                 "gemini_copy_error": copy_error,

@@ -7,6 +7,7 @@ from unittest.mock import patch
 from app.core.config import settings
 from app.graphs.recommendation_graph import (
     _apply_recommendation_copy,
+    _has_incomplete_reason_sentence,
     _mentions_unsupported_music_detail,
     _repeats_time_clause,
     _is_safe_recommendation_message,
@@ -43,6 +44,12 @@ from app.services.spotify_service import (
 
 
 class GeminiRecommendationCopyTests(unittest.TestCase):
+    def test_incomplete_korean_reason_endings_are_rejected(self) -> None:
+        self.assertTrue(_has_incomplete_reason_sentence("재즈 연주가 중심인 곡이에요. 생각을 정리하고 싶을"))
+        self.assertTrue(_has_incomplete_reason_sentence("재즈 연주가 중심인 곡이에요. 재즈의 흐름을 부담 없이 이"))
+        self.assertTrue(_has_incomplete_reason_sentence("재즈 연주가 중심인 곡이에요. 잠시 쉬어가며"))
+        self.assertFalse(_has_incomplete_reason_sentence("재즈 연주가 중심인 곡이에요. 잠시 쉬어가고 싶을 때 잘 맞아요."))
+
     def test_fallback_selection_spreads_categories_within_ranked_pool(self) -> None:
         catalog = _select_fallback_catalog(
             "focused",

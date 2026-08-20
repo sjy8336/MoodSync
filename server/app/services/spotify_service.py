@@ -1723,10 +1723,14 @@ def _jazz_catalog_feature_sentence(tags: set[str]) -> str | None:
     """Describe only catalog-level genre/mood facts when recording instruments are unknown."""
     if "bossa-nova" in tags:
         return "보사노바 계열의 가벼운 리듬이 있는 재즈 연주곡이에요."
+    if "modal" in tags:
+        return "모달 재즈 특유의 여유 있는 분위기가 이어지는 연주곡이에요."
     if "odd_meter" in tags:
         return "독특한 박자감이 또렷한 재즈 연주곡이에요."
     if "hard-bop" in tags:
         return "하드 밥 계열의 리듬감이 분명한 재즈 곡이에요."
+    if "standard" in tags:
+        return "재즈 스탠더드의 연주가 중심인 곡이에요."
     if "low_stimulation" in tags and "relaxed" in tags:
         return "차분한 분위기의 재즈 연주곡이에요."
     if "relaxed" in tags:
