@@ -445,6 +445,23 @@ def _build_contextual_reason_facts(name: str, artist_name: str, context_text: st
             )
             if present
         ]
+    if _is_drive_request(context_text) and not _is_family_trip_request(context_text):
+        tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
+        facts["drive_fit"] = bool(tags & {"driving", "upbeat", "high_energy", "rock", "punk", "pop-punk", "pop"})
+        facts["energy_fit"] = bool(tags & {"upbeat", "high_energy", "driving"})
+        facts["pop_fit"] = bool(tags & {"pop", "dance-pop", "synth-pop", "pop-punk"})
+        facts["punk_fit"] = bool(tags & {"punk", "pop-punk"})
+        facts["pop_punk_bridge"] = "pop-punk" in tags
+        facts["singalong_fit"] = bool(tags & {"mainstream", "broad_familiarity_ko", "family_trip"})
+        facts["drive_ranking_factors"] = [
+            key for key, present in (
+                ("drive", facts["drive_fit"]),
+                ("energy", facts["energy_fit"]),
+                ("pop", facts["pop_fit"]),
+                ("punk", facts["punk_fit"]),
+                ("singalong_proxy", facts["singalong_fit"]),
+            ) if present
+        ]
     if _is_long_focus_request(context_text):
         tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
         moods = {str(mood).lower() for mood in facts.get("moods", []) if mood}
@@ -906,6 +923,12 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             "sustained_focus_fit": facts.get("sustained_focus_fit"),
             "distraction_risk": facts.get("distraction_risk"),
             "feature_role_compatibility": facts.get("feature_role_compatibility"),
+            "drive_fit": facts.get("drive_fit"),
+            "energy_fit": facts.get("energy_fit"),
+            "pop_fit": facts.get("pop_fit"),
+            "punk_fit": facts.get("punk_fit"),
+            "pop_punk_bridge": facts.get("pop_punk_bridge"),
+            "singalong_fit": facts.get("singalong_fit"),
             "playlist_role": (
                 "light_rhythm"
                 if facts.get("light_rhythm_fit")
@@ -940,6 +963,9 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         "previous_focus_context_reset": True,
         "previous_artist_origin_preference_reset": True,
         "selected_track_count": len(tracks),
+        "pop_side_count": sum(bool((track.reason_facts or {}).get("pop_fit")) and not bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
+        "punk_side_count": sum(bool((track.reason_facts or {}).get("punk_fit")) and not bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
+        "pop_punk_bridge_count": sum(bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
         "selected_tracks": selected_tracks,
     }
 
@@ -1842,22 +1868,24 @@ def _korean_band_rock_feature_sentence(track_tags: list[str], index: int = 0) ->
     return None
 
 
-def _drive_feature_sentence(track_tags: list[str]) -> str | None:
+def _drive_feature_sentence(track_tags: list[str], index: int = 0) -> str | None:
     """Describe a supplied drive/genre feature without promising an effect."""
     tags = {str(tag).lower() for tag in track_tags if tag}
+    feature_sentences: list[str] = []
     if "pop-punk" in tags:
-        return "팝과 펑크의 성격이 함께 드러나는 팝펑크 곡이에요."
+        feature_sentences.append("팝과 펑크의 성격이 함께 드러나는 팝펑크 곡이에요.")
     if "punk" in tags:
-        return "강한 밴드 사운드가 중심인 펑크 록 곡이에요."
+        feature_sentences.append("강한 밴드 사운드가 중심인 펑크 록 곡이에요.")
+        feature_sentences.append("펑크 록 특유의 직선적인 사운드가 분명한 곡이에요.")
     if "pop" in tags or "dance-pop" in tags or "synth-pop" in tags:
-        return "밝고 신나는 팝 분위기가 또렷한 곡이에요."
+        feature_sentences.append("밝고 신나는 팝 분위기가 또렷한 곡이에요.")
     if "rock" in tags:
-        return "록 사운드가 중심인 곡이에요."
+        feature_sentences.append("록 사운드가 중심인 곡이에요.")
     if "high_energy" in tags or "driving" in tags:
-        return "에너지 있는 분위기가 분명한 곡이에요."
+        feature_sentences.append("에너지 있는 분위기가 분명한 곡이에요.")
     if "upbeat" in tags:
-        return "밝고 경쾌한 분위기가 이어지는 곡이에요."
-    return None
+        feature_sentences.append("밝고 경쾌한 분위기가 이어지는 곡이에요.")
+    return feature_sentences[index % len(feature_sentences)] if feature_sentences else None
 
 
 def build_track_reason(
@@ -1913,7 +1941,7 @@ def build_track_reason(
         if focus_feature:
             return f"{focus_feature} {_role_listening_sentence(recommendation_role, index)}"
     if _is_drive_request(context_text) and not _is_family_trip_request(context_text):
-        drive_feature = _drive_feature_sentence(track_tags)
+        drive_feature = _drive_feature_sentence(track_tags, index)
         if drive_feature:
             return f"{drive_feature} {_role_listening_sentence(recommendation_role, index)}"
     if _is_calm_jazz_instrument_request(context_text):

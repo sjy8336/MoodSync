@@ -420,6 +420,14 @@ def _is_feature_role_compatible(track: TrackSummary, mood: str, input_text: str,
     role = _recommendation_role(mood, index, input_text, reason_facts=track.reason_facts)
     focus = role.get("focus", "")
     facts = track.reason_facts or {}
+    if "드라이브" in input_text or "차 타고" in input_text or "도로 위" in input_text:
+        tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
+        if "팝 분위기 더하기" in focus and not tags.intersection({"pop", "dance-pop", "synth-pop", "pop-punk"}):
+            return False
+        if "펑크 에너지 더하기" in focus and not tags.intersection({"punk", "pop-punk", "rock"}):
+            return False
+        if focus in {"공부 템포 유지", "현재 공부 흐름 유지", "몰입 상태 이어가기", "지루함 방지", "짧은 분위기 환기"}:
+            return False
     if "장시간" not in input_text and "오래 앉" not in input_text and "오랫동안" not in input_text:
         return True
     if focus in {"가벼운 리듬 더하기", "단조로움 줄이기"} and facts.get("light_rhythm_fit") is not True:

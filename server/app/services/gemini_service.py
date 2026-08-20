@@ -153,6 +153,21 @@ _DRIVE_ROLES = [
     ("이동 중 리듬 변화", "이동하면서 에너지 있는 곡을 이어 듣고 싶을 때"),
     ("장거리 드라이브 기분 유지", "멀리 이동하는 동안 활기 있는 음악을 듣고 싶을 때"),
 ]
+_DRIVE_POP_ROLES = [
+    _DRIVE_ROLES[0],
+    _DRIVE_ROLES[2],
+    _DRIVE_ROLES[5],
+]
+_DRIVE_PUNK_ROLES = [
+    _DRIVE_ROLES[3],
+    _DRIVE_ROLES[4],
+    _DRIVE_ROLES[5],
+]
+_DRIVE_BRIDGE_ROLES = [
+    _DRIVE_ROLES[1],
+    _DRIVE_ROLES[3],
+    _DRIVE_ROLES[4],
+]
 
 
 def _build_listening_request_context(text: str | None, selected_vibes: list[str] | None) -> dict[str, object]:
@@ -635,7 +650,16 @@ def _recommendation_role(
     elif is_family_trip_context:
         roles = _FAMILY_TRIP_ROLES
     elif is_drive_context:
-        roles = _DRIVE_ROLES
+        raw_tags = reason_facts.get("tags", []) if isinstance(reason_facts, dict) else []
+        tags = {str(tag).strip().lower() for tag in raw_tags if str(tag).strip()}
+        if "pop-punk" in tags:
+            roles = _DRIVE_BRIDGE_ROLES
+        elif "punk" in tags or "rock" in tags:
+            roles = _DRIVE_PUNK_ROLES
+        elif "pop" in tags or tags & {"dance-pop", "synth-pop"}:
+            roles = _DRIVE_POP_ROLES
+        else:
+            roles = _DRIVE_ROLES
     elif is_korean_rock_context:
         roles = _CATHARTIC_KOREAN_ROCK_ROLES
     elif is_dawn_sentimental_context:
