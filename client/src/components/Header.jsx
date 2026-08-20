@@ -183,7 +183,7 @@ function ProfileMenu({ size = 38, iconSize = 18 }) {
         try {
             await logoutAccount();
         } catch {
-            // 서버 쿠키 정리가 실패하더라도 로컬 로그아웃은 보장한다.
+            void 0;
         } finally {
             logout();
             navigate('/login', { replace: true });
@@ -261,13 +261,7 @@ export default function Header() {
 
     const pillPaddingClass = isMobile || isTablet ? 'px-4 py-[10px]' : 'pl-[18px] pr-[10px] py-[10px]';
 
-    /*
-      ── 글래스모피즘 (스크롤 시)
-      - 배경: 반투명 화이트 + 블러/새추레이션으로 뒤 콘텐츠가 은은하게 비치는 느낌
-      - 상단 하이라이트 라인(before): 유리 위쪽 가장자리에 빛이 반사되는 듯한 얇은 선
-      - 그림자: 중성 그림자 + 라벤더 톤의 컬러 그림자를 살짝 섞어 입체감과 색감을 더함
-      - 미스크롤 상태: 완전히 투명하게 배경에 자연스럽게 스며들도록 처리
-    */
+
     const pillClassName = `relative isolate flex items-center justify-between overflow-hidden rounded-full transition-all duration-500 ease-out before:pointer-events-none before:absolute before:inset-x-6 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/80 before:to-transparent before:transition-opacity before:duration-500 ${
         scrolled
             ? 'border border-white/60 bg-white/55 shadow-[0_8px_32px_-10px_rgba(33,28,38,0.22),0_2px_10px_-4px_rgba(123,127,240,0.28)] backdrop-blur-xl backdrop-saturate-[180%] before:opacity-100'

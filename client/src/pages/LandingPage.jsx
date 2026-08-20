@@ -2,9 +2,7 @@ import { useState, useEffect } from 'react';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 
-/* ───────────────────────────────────────────
-   DESIGN TOKENS  (모든 색상·스타일 단일 출처)
-─────────────────────────────────────────── */
+
 const T = {
     bg: '#FAF8F4',
     bgSoft: '#F1ECE3',
@@ -24,9 +22,7 @@ const T = {
     spotBlack: '#191414',
 };
 
-/* ───────────────────────────────────────────
-   ICONS  (lucide SVG path 직접 삽입)
-─────────────────────────────────────────── */
+
 const Ic = ({ d, size = 20, color = 'currentColor', fill = 'none', sw = 1.8, className = '' }) => (
     <svg
         width={size}
@@ -96,9 +92,7 @@ const I = {
     waveform: 'M2 12h2M6 8v8M10 5v14M14 9v6M18 6v12M22 12h2',
 };
 
-/* ───────────────────────────────────────────
-   SPOTIFY MARK
-─────────────────────────────────────────── */
+
 const SpotifyMark = ({ size = 18 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" className="inline-block shrink-0">
         <circle cx="12" cy="12" r="12" fill="#1ED760" />
@@ -109,9 +103,7 @@ const SpotifyMark = ({ size = 18 }) => (
     </svg>
 );
 
-/* ───────────────────────────────────────────
-   RESPONSIVE HOOK
-─────────────────────────────────────────── */
+
 const useBreakpoint = () => {
     const [bp, setBp] = useState('desktop');
     useEffect(() => {
@@ -126,9 +118,7 @@ const useBreakpoint = () => {
     return bp;
 };
 
-/* ───────────────────────────────────────────
-   HERO SPECTRUM VISUAL  (인터랙티브)
-─────────────────────────────────────────── */
+
 const MOODS = [
     {
         id: 0,
@@ -282,18 +272,14 @@ const SpectrumVisual = () => {
     );
 };
 
-/* ───────────────────────────────────────────
-   SECTION TAG
-─────────────────────────────────────────── */
+
 const Tag = ({ icon, children }) => (
     <div className="mb-4 inline-flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.07em] text-[#FF6B5E]">
         <Ic d={icon} size={13} color={T.joy} /> {children}
     </div>
 );
 
-/* ───────────────────────────────────────────
-   SECTION HEAD
-─────────────────────────────────────────── */
+
 const SectionHead = ({ tag, tagIcon, title, desc, center }) => (
     <div className={`${center ? 'mx-auto text-center' : 'ml-0 text-left'} mb-14 max-w-[620px]`}>
         <Tag icon={tagIcon}>{tag}</Tag>
@@ -304,9 +290,7 @@ const SectionHead = ({ tag, tagIcon, title, desc, center }) => (
     </div>
 );
 
-/* ───────────────────────────────────────────
-   BENTO CARD
-─────────────────────────────────────────── */
+
 const BentoCard = ({ iconD, iconBg, iconColor, title, desc, children, className = '' }) => {
     const [hov, setHov] = useState(false);
     return (
@@ -327,9 +311,7 @@ const BentoCard = ({ iconD, iconBg, iconColor, title, desc, children, className 
     );
 };
 
-/* ───────────────────────────────────────────
-   MOOD CHIPS
-─────────────────────────────────────────── */
+
 const CHIPS = [
     { icon: I.smile, label: '기쁨', bgClass: 'bg-[#FFEAE6]', textClass: 'text-[#9C3D33]' },
     { icon: I.cloud, label: '평온', bgClass: 'bg-[#F1ECE3]', textClass: 'text-[#6E6678]' },
@@ -354,12 +336,7 @@ const FeatureCard = ({ icon, bgClass, iconColor, title, desc }) => {
     );
 };
 
-/* ───────────────────────────────────────────
-   TRACK CARD  (Spotify 정책 준수)
-   - 앨범 커버 원본 유지 (변형·오버레이 없음)
-   - 곡명·아티스트명·앨범 커버에 Spotify 링크
-   - "Provided by Spotify" + "Spotify에서 듣기" 명시
-─────────────────────────────────────────── */
+
 const TrackCard = ({ cover, title, artist, reason, spotifyUrl, index }) => {
     const [liked, setLiked] = useState(false);
     const [hov, setHov] = useState(false);
@@ -371,9 +348,9 @@ const TrackCard = ({ cover, title, artist, reason, spotifyUrl, index }) => {
             onMouseLeave={() => setHov(false)}
             className={`mb-3 overflow-hidden rounded-[20px] border bg-white transition-all duration-200 ${hov ? 'border-[#D6CFC1] shadow-[0_8px_28px_-10px_rgba(33,28,38,0.13)]' : 'border-[#E5DFD3]'}`}
         >
-            {/* 메인 행: 앨범커버 + 정보 + 액션 */}
+
             <div className="flex items-stretch">
-                {/* ✅ 앨범 커버 — 원본 그대로, 오버레이/필터 없음, Spotify 링크 */}
+
                 <a
                     href={spotifyUrl}
                     target="_blank"
@@ -383,9 +360,9 @@ const TrackCard = ({ cover, title, artist, reason, spotifyUrl, index }) => {
                     <img src={cover} alt={`${title} 앨범 커버`} className="block h-[84px] w-[84px] object-cover" />
                 </a>
 
-                {/* 트랙 정보 */}
+
                 <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 px-[16px] py-[13px] pr-[14px]">
-                    {/* ✅ 곡명 — Spotify 링크 */}
+
                     <a
                         href={spotifyUrl}
                         target="_blank"
@@ -394,7 +371,7 @@ const TrackCard = ({ cover, title, artist, reason, spotifyUrl, index }) => {
                     >
                         {title}
                     </a>
-                    {/* ✅ 아티스트명 — Spotify 링크 */}
+
                     <a
                         href={spotifyUrl}
                         target="_blank"
@@ -403,13 +380,13 @@ const TrackCard = ({ cover, title, artist, reason, spotifyUrl, index }) => {
                     >
                         {artist}
                     </a>
-                    {/* ✅ Provided by Spotify */}
+
                     <span className="inline-flex items-center gap-1 text-[11px] text-[#A39CAC]">
                         <SpotifyMark size={11} /> Provided by Spotify
                     </span>
                 </div>
 
-                {/* 액션: 좋아요 + Spotify 재생 버튼 */}
+
                 <div className="flex shrink-0 flex-col items-center justify-center gap-2 px-[14px]">
                     <button
                         onClick={() => setLiked((l) => !l)}
@@ -419,7 +396,7 @@ const TrackCard = ({ cover, title, artist, reason, spotifyUrl, index }) => {
                         <Ic d={I.heart} size={14} color={liked ? T.joy : T.inkFaint} fill={liked ? T.joy : 'none'} />
                     </button>
 
-                    {/* ✅ Spotify에서 듣기 — 필수 링크 버튼 */}
+
                     <a
                         href={spotifyUrl}
                         target="_blank"
@@ -432,7 +409,7 @@ const TrackCard = ({ cover, title, artist, reason, spotifyUrl, index }) => {
                 </div>
             </div>
 
-            {/* 추천 이유 — Mood Sync 고유 요소 (Spotify 단순 나열 아님을 명확히) */}
+
             <div className="flex items-start gap-2 border-t border-[#E5DFD3] bg-[#F1ECE3] px-4 py-2.5">
                 <Ic d={I.bulb} size={13} color={T.calm} className="mt-0.5 shrink-0" />
                 <p className="m-0 text-[12.5px] leading-[1.65] text-[#6E6678]">{reason}</p>
@@ -441,9 +418,7 @@ const TrackCard = ({ cover, title, artist, reason, spotifyUrl, index }) => {
     );
 };
 
-/* ───────────────────────────────────────────
-   BTN HELPERS
-─────────────────────────────────────────── */
+
 const BtnPrimary = ({ href, children, className = '' }) => {
     const [hov, setHov] = useState(false);
     return (
@@ -477,9 +452,7 @@ const sectionPadClass = (mobile, desktop = '120') => `py-[${mobile}px] min-[900p
 const gridColsClass = (isMobile, isTablet, desktopCount) =>
     isMobile ? 'grid-cols-1' : isTablet ? 'grid-cols-2' : `grid-cols-${desktopCount}`;
 
-/* ═══════════════════════════════════════════
-   PAGE
-═══════════════════════════════════════════ */
+
 export default function MoodSync() {
     const bp = useBreakpoint();
     const isMobile = bp === 'mobile';
@@ -492,7 +465,7 @@ export default function MoodSync() {
         <div className="overflow-x-hidden bg-[#FAF8F4] font-[Pretendard,system-ui,sans-serif] text-[#211C26] antialiased">
             <Header />
 
-            {/* ── HERO ── */}
+
             <section className="relative overflow-hidden pt-[120px] min-[900px]:pt-[156px]">
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(50%_60%_at_50%_0%,rgba(255,107,94,0.10)_0%,transparent_70%),radial-gradient(40%_50%_at_85%_10%,rgba(123,127,240,0.10)_0%,transparent_70%)]" />
 
@@ -537,7 +510,7 @@ export default function MoodSync() {
                 </div>
             </section>
 
-            {/* ── CONCEPT ── */}
+
             <section id="concept" className={isMobile ? 'py-[72px]' : 'py-[120px]'}>
                 <div className={wrap}>
                     <SectionHead
@@ -625,7 +598,7 @@ export default function MoodSync() {
                 </div>
             </section>
 
-            {/* ── EXAMPLE RESULT ── */}
+
             <section id="example" className={isMobile ? 'pb-[72px]' : 'pb-[120px]'}>
                 <div className={wrap}>
                     <SectionHead
@@ -681,7 +654,7 @@ export default function MoodSync() {
                                     spotifyUrl="https://open.spotify.com"
                                 />
 
-                                {/* ── 하단 출처 ── */}
+
                                 <div className="mt-1 flex flex-wrap items-center justify-between gap-2 border-t border-[#E5DFD3] pt-4">
                                     <a
                                         href="https://open.spotify.com"
@@ -714,7 +687,7 @@ export default function MoodSync() {
                 </div>
             </section>
 
-            {/* ── SPOTIFY CONNECT ── */}
+
             <section id="connect" className={`relative overflow-hidden ${isMobile ? 'py-[72px]' : 'py-[120px]'} bg-[#211C26] text-[#FAF8F4]`}>
                 <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(60%_80%_at_50%_0%,rgba(30,215,96,0.12)_0%,transparent_70%)]" />
 
@@ -777,7 +750,7 @@ export default function MoodSync() {
                 </div>
             </section>
 
-            {/* ── DIFFERENTIATORS ── */}
+
             <section className={isMobile ? 'py-[72px]' : 'py-[120px]'}>
                 <div className={wrap}>
                     <SectionHead
@@ -797,7 +770,7 @@ export default function MoodSync() {
                 </div>
             </section>
 
-            {/* ── FINAL CTA ── */}
+
             <section className={isMobile ? 'pb-[72px]' : 'pb-[120px]'}>
                 <div className={wrap}>
                     <div className={`rounded-[32px] border border-[#E5DFD3] bg-[linear-gradient(135deg,#FFEAE6_0%,#ECEDFD_100%)] ${isMobile ? 'px-6 py-[52px]' : 'px-10 py-20'} text-center`}>

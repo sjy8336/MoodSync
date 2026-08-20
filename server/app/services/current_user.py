@@ -29,7 +29,7 @@ def sync_spotify_token_cookies(response: Response, request: Request) -> None:
             value=str(access_token),
             httponly=True,
             samesite="lax",
-            secure=False,
+            secure=settings.cookie_secure,
             max_age=int(expires_in or 3600),
             path="/",
         )
@@ -39,7 +39,7 @@ def sync_spotify_token_cookies(response: Response, request: Request) -> None:
             value=str(refresh_token),
             httponly=True,
             samesite="lax",
-            secure=False,
+            secure=settings.cookie_secure,
             max_age=60 * 60 * 24 * 30,
             path="/",
         )

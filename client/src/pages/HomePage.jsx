@@ -6,9 +6,7 @@ import Footer from '../components/Footer';
 import FavoriteToast from '../components/FavoriteToast';
 import { useAuth } from '../contexts/AuthContext';
 
-/* ─────────────────────────────────────────────────────────────
-   SVG ICON
-───────────────────────────────────────────────────────────── */
+
 const Ic = ({ d, size = 20, color = 'currentColor', fill = 'none', sw = 1.8, className = '' }) => (
     <svg
         width={size}
@@ -61,7 +59,7 @@ const I = {
     clock: ['M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z', 'M12 6v6l4 2'],
     refresh: 'M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6',
     x: 'M18 6 6 18M6 6l12 12',
-    /* 감정 아이콘 추가 */
+
     flame: [
         'M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z',
     ],
@@ -79,9 +77,7 @@ const I = {
     alertCirc: ['M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z', 'M12 8v4M12 16h.01'],
 };
 
-/* ─────────────────────────────────────────────────────────────
-   SPOTIFY MARK
-───────────────────────────────────────────────────────────── */
+
 const SpotifyMark = ({ size = 16 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" className="inline-block shrink-0">
         <circle cx="12" cy="12" r="12" fill="#1ED760" />
@@ -92,9 +88,7 @@ const SpotifyMark = ({ size = 16 }) => (
     </svg>
 );
 
-/* ─────────────────────────────────────────────────────────────
-   ALBUM COVER — 이미지 실패 시 그라디언트 + 음표 폴백
-───────────────────────────────────────────────────────────── */
+
 const AlbumCover = ({ src, title, size = 64, radius = 10 }) => {
     const [failed, setFailed] = useState(false);
     const hasSrc = Boolean(src) && !failed;
@@ -112,7 +106,7 @@ const AlbumCover = ({ src, title, size = 64, radius = 10 }) => {
                 />
             ) : (
                 <div className="w-full h-full flex items-center justify-center relative bg-[linear-gradient(135deg,#FFEAE6_0%,#ECEDFD_55%,#FFF3DE_100%)]">
-                    {/* 하이라이트 */}
+
                     <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.5)_0%,transparent_36%)]" />
                     <Ic
                         d={I.music}
@@ -126,9 +120,7 @@ const AlbumCover = ({ src, title, size = 64, radius = 10 }) => {
     );
 };
 
-/* ─────────────────────────────────────────────────────────────
-   MOCK DATA
-───────────────────────────────────────────────────────────── */
+
 const RECENT_MOODS = [
     { day: '어제', label: '지침', icon: I.moon, color: '#7B7FF0', soft: '#ECEDFD' },
     { day: '3일 전', label: '설렘', icon: I.sparkle, color: '#FFB648', soft: '#FFF3DE' },
@@ -180,9 +172,7 @@ const TODAY_MOOD_RECORDED = {
     },
 };
 
-/* ─────────────────────────────────────────────────────────────
-   MOOD / DATA HELPERS
-───────────────────────────────────────────────────────────── */
+
 const MOOD_STYLE_MAP = {
     happy: { label: '기쁨', icon: I.smile, color: '#FF6B5E', soft: '#FFEAE6' },
     excited: { label: '설렘', icon: I.sparkle, color: '#FFB648', soft: '#FFF3DE' },
@@ -369,17 +359,13 @@ const buildRecentTrackItems = (recommendation) => {
     }));
 };
 
-/* ─────────────────────────────────────────────────────────────
-   DATE HELPER
-───────────────────────────────────────────────────────────── */
+
 const getTodayString = () => {
     const d = new Date();
     return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
 };
 
-/* ─────────────────────────────────────────────────────────────
-   TRACK CARD (Spotify 정책 준수)
-───────────────────────────────────────────────────────────── */
+
 const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
     const [liked, setLiked] = useState(false);
     const [hov, setHov] = useState(false);
@@ -430,7 +416,7 @@ const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
             onMouseLeave={() => setHov(false)}
         >
             <div className="flex items-stretch">
-                {/* ✅ 앨범 커버 — 원본, 변형/필터/오버레이 없음, Spotify 링크 */}
+
                 <a
                     href={spotifyUrl}
                     target="_blank"
@@ -441,9 +427,9 @@ const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
                     <AlbumCover src={track.cover} title={track.title} size={64} radius={10} />
                 </a>
 
-                {/* 트랙 정보 */}
+
                 <div className="flex-1 min-w-0 flex flex-col justify-center gap-[3px] pr-3 py-3">
-                    {/* ✅ 곡명 — Spotify 링크 */}
+
                     <a
                         href={spotifyUrl}
                         target="_blank"
@@ -452,7 +438,7 @@ const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
                     >
                         {track.title}
                     </a>
-                    {/* ✅ 아티스트명 — Spotify 링크 */}
+
                     <a
                         href={spotifyUrl}
                         target="_blank"
@@ -461,7 +447,7 @@ const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
                     >
                         {track.artist}
                     </a>
-                    {/* 감정 태그 + Provided by Spotify */}
+
                     <div className="flex items-center gap-2 mt-[2px]">
                         <span
                             className={`text-[11px] font-semibold px-[8px] py-[2px] rounded-full ${getTrackMoodChipClass(
@@ -470,14 +456,14 @@ const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
                         >
                             {track.mood}
                         </span>
-                        {/* ✅ Provided by Spotify */}
+
                         <span className="flex items-center gap-[3px] text-[10.5px] text-[#A39CAC]">
                             <SpotifyMark size={10} /> Provided by Spotify
                         </span>
                     </div>
                 </div>
 
-                {/* 액션 영역 */}
+
                 <div className="flex flex-col items-center justify-center gap-2 pr-3 shrink-0">
                     <button
                         onClick={handleLikeToggle}
@@ -496,7 +482,7 @@ const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
                             fill={liked ? '#FF6B5E' : 'none'}
                         />
                     </button>
-                    {/* ✅ Spotify에서 듣기 */}
+
                     <a
                         href={spotifyUrl}
                         target="_blank"
@@ -509,7 +495,7 @@ const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
                 </div>
             </div>
 
-            {/* ✅ 추천 이유 — Mood Sync 고유 요소 */}
+
             <div className="flex items-center gap-2 px-4 py-[8px] border-t border-[#EEEBE4]">
                 <Ic d={I.bulb} size={12} color="#7B7FF0" className="shrink-0 mt-[1px]" />
                 <p className="text-[11.5px] text-[#A39CAC] leading-snug m-0">
@@ -520,9 +506,7 @@ const TrackCard = ({ track, onLike, onUnlike, initialLiked = false }) => {
     );
 };
 
-/* ─────────────────────────────────────────────────────────────
-   TODAY MOOD CARD — 기록 전 / 기록 후 두 상태
-───────────────────────────────────────────────────────────── */
+
 const TodayMoodCard = ({ recorded }) => {
     if (!recorded) {
         return (
@@ -534,7 +518,7 @@ const TodayMoodCard = ({ recorded }) => {
 
                 <Link to="/mood-input" className="group block no-underline mb-5">
                     <div className="flex flex-col items-center justify-center py-6 gap-3 rounded-2xl border border-dashed border-[#E5DFD3] group-hover:border-[#D6CFC1] group-hover:bg-[#FAF8F4] transition-all duration-200">
-                        {/* gradient bg — style 불가피하게 유지 (Tailwind로 동적 gradient 표현 불가) */}
+
                         <div className="w-[52px] h-[52px] rounded-2xl flex items-center justify-center transition-transform duration-200 group-hover:scale-105 bg-[linear-gradient(135deg,#FFEAE6_0%,#ECEDFD_100%)]">
                             <Ic d={I.sparkles} size={24} color="#FF6B5E" sw={1.6} />
                         </div>
@@ -550,7 +534,7 @@ const TodayMoodCard = ({ recorded }) => {
                     </div>
                 </Link>
 
-                {/* 기록하면 보이는 미리보기 (흐림 처리) */}
+
                 <div aria-hidden="true" className="opacity-40 select-none pointer-events-none">
                     <p className="text-[10.5px] font-semibold text-[#A39CAC] mb-[10px]">기록하면 이렇게 분석돼요</p>
                     <div className="flex flex-col gap-[9px]">
@@ -572,7 +556,7 @@ const TodayMoodCard = ({ recorded }) => {
         );
     }
 
-    /* ── 기록 후 상태 ── */
+
     return (
         <div className="bg-white border border-[#E5DFD3] rounded-3xl p-6 shadow-[0_20px_60px_-20px_rgba(33,28,38,0.13)]">
             <div className="flex items-center justify-between mb-5">
@@ -583,7 +567,7 @@ const TodayMoodCard = ({ recorded }) => {
                 </span>
             </div>
 
-            {/* 감정 헤드라인 */}
+
             <div className="flex items-center gap-3 mb-6">
                 <div
                     className={`w-[48px] h-[48px] rounded-2xl flex items-center justify-center shrink-0 ${getMoodTintSoftClass(
@@ -600,7 +584,7 @@ const TodayMoodCard = ({ recorded }) => {
                 </div>
             </div>
 
-            {/* 감정 분석 미니 바 */}
+
             <div className="flex flex-col gap-[10px] mb-6">
                 {recorded.analysis.map((a) => (
                     <div key={a.label} className="flex items-center gap-3">
@@ -619,7 +603,7 @@ const TodayMoodCard = ({ recorded }) => {
                 ))}
             </div>
 
-            {/* 오늘의 추천곡 미리보기 */}
+
             <p className="text-[10.5px] font-semibold text-[#A39CAC] mb-[8px]">오늘의 추천곡</p>
             <Link
                 to="/recommendations"
@@ -635,7 +619,7 @@ const TodayMoodCard = ({ recorded }) => {
                 <Ic d={I.chevRight} size={14} color="#A39CAC" className="shrink-0" />
             </Link>
 
-            {/* 다시 기록하기 */}
+
             <Link
                 to="/mood-input"
                 className="flex items-center justify-center gap-[6px] w-full no-underline text-[11.5px] font-medium text-[#A39CAC] hover:text-[#6E6678] pt-3 transition-colors duration-150"
@@ -647,9 +631,7 @@ const TodayMoodCard = ({ recorded }) => {
     );
 };
 
-/* ═════════════════════════════════════════════════════════════
-   PAGE
-═════════════════════════════════════════════════════════════ */
+
 export default function HomePage() {
     const { user } = useAuth();
     const [health, setHealth] = useState(null);
@@ -749,13 +731,13 @@ export default function HomePage() {
 
     return (
         <div className="min-h-screen bg-[#FAF8F4] font-[Pretendard,system-ui,sans-serif] antialiased overflow-x-hidden">
-            {/* 토스트 */}
+
             <FavoriteToast visible={toastVisible} message={toastMessage} onClose={() => setToastVisible(false)} />
 
             <Header />
 
             <main className="max-w-[1240px] mx-auto px-5 sm:px-7 md:px-10 pt-24 md:pt-28 pb-20">
-                {/* 에러 배너 */}
+
                 {error && (
                     <div className="mt-4 px-4 py-3 bg-[#FFEAE6] border border-[rgba(255,107,94,0.22)] rounded-xl text-[12.5px] text-[#8B2218]">
                         {error}
@@ -767,11 +749,9 @@ export default function HomePage() {
                     </div>
                 )}
 
-                {/* ════════════════════════════════
-                    HERO
-                ════════════════════════════════ */}
+
                 <section className="relative pt-12 pb-12 md:pt-16 md:pb-16">
-                    {/* 배경 오브 */}
+
                     <div aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden -z-10">
                         <div
                             className="absolute -top-[10%] -right-[8%] w-[380px] h-[380px] rounded-full bg-[radial-gradient(circle,rgba(255,107,94,0.12)_0%,transparent_70%)] [animation:ms-orb_10s_ease-in-out_infinite]"
@@ -782,15 +762,15 @@ export default function HomePage() {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_328px] gap-8 md:gap-10 items-start">
-                        {/* 왼쪽: 인사 + CTA */}
+
                         <div>
-                            {/* 날짜 뱃지 */}
+
                             <div className="ms-fu inline-flex items-center gap-[6px] text-[12px] font-semibold text-[#6E6678] bg-white border border-[#E5DFD3] rounded-full px-[12px] py-[5px] mb-6 shadow-[0_2px_8px_rgba(33,28,38,0.05)] [animation-delay:0.05s]">
                                 <Ic d={I.clock} size={12} color="#A39CAC" />
                                 {today}
                             </div>
 
-                            {/* 인사 헤드라인 */}
+
                             <h1 className="ms-fu text-[clamp(28px,5vw,48px)] font-extrabold tracking-[-0.035em] leading-[1.2] text-[#211C26] mb-3 [animation-delay:0.12s]">
                                 안녕하세요,{' '}
                                 <span className="bg-[linear-gradient(110deg,#FF6B5E_0%,#FFB648_50%,#7B7FF0_100%)] bg-clip-text text-transparent">
@@ -805,7 +785,7 @@ export default function HomePage() {
                                 감정을 고르면 그 순간에 맞는 음악을 찾아드려요.
                             </p>
 
-                            {/* CTA 버튼 */}
+
                             <div className="ms-fu flex flex-col sm:flex-row gap-3 [animation-delay:0.32s]">
                                 <Link
                                     to="/mood-input"
@@ -835,18 +815,16 @@ export default function HomePage() {
                             </div>
                         </div>
 
-                        {/* 오른쪽: 오늘의 감정 카드 */}
+
                         <div className="ms-fu w-full md:w-[340px] shrink-0 [animation-delay:0.3s]">
                             <TodayMoodCard recorded={todayMood} />
                         </div>
                     </div>
                 </section>
 
-                {/* ════════════════════════════════
-                    2-COL GRID: 최근 감정 + 최근 추천 음악
-                ════════════════════════════════ */}
+
                 <div className="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6 mt-5">
-                    {/* ── 최근 감정 기록 ── */}
+
                     <section>
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-[15px] font-bold text-[#211C26] flex items-center gap-2">
@@ -906,7 +884,7 @@ export default function HomePage() {
                         </div>
                     </section>
 
-                    {/* ── 최근 추천 음악 ── */}
+
                     <section>
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-[15px] font-bold text-[#211C26] flex items-center gap-2">
@@ -945,7 +923,7 @@ export default function HomePage() {
                             )}
                         </div>
 
-                        {/* ✅ 하단 Spotify 출처 표시 */}
+
                         <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#E5DFD3] flex-wrap gap-3">
                             <a
                                 href="https://open.spotify.com"
@@ -967,7 +945,7 @@ export default function HomePage() {
                     </section>
                 </div>
 
-                {/* ── 모바일 전용 하단 nav ── */}
+
                 <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5DFD3] z-40 flex">
                     {[
                         { to: '/', label: '홈', icon: I.waveform },

@@ -117,9 +117,9 @@ export default function Footer({ wrap = '', isMobile }) {
     return (
         <footer className="border-t border-[#E5DFD3] bg-[#FAF8F4] pt-14 pb-8">
             <div className={`w-full ${wrapClassName}`}>
-                {/* ── 상단: 브랜드 + 내비게이션 그룹 ── */}
+
                 <div className="flex flex-col gap-10 md:flex-row md:justify-between md:gap-6">
-                    {/* 브랜드 */}
+
                     <div className="max-w-[280px]">
                         <Link
                             to="/"
@@ -136,7 +136,7 @@ export default function Footer({ wrap = '', isMobile }) {
                         </span>
                     </div>
 
-                    {/* 내비게이션 그룹 */}
+
                     <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 md:gap-12">
                         {FOOTER_NAV_GROUPS.map((group) => (
                             <div key={group.title}>
@@ -160,10 +160,10 @@ export default function Footer({ wrap = '', isMobile }) {
                     </div>
                 </div>
 
-                {/* ── 구분선 ── */}
+
                 <div className="my-9 h-px w-full bg-[#E5DFD3]" />
 
-                {/* ── 하단: 저작권 + Spotify 고지 ── */}
+
                 <div
                     className={`flex flex-col gap-4 ${
                         compactLayout ? 'items-start' : 'md:flex-row md:items-end md:justify-between'

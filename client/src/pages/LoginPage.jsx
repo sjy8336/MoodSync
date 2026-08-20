@@ -4,9 +4,7 @@ import { getSpotifyCallback, getSpotifyLoginUrl, startDemoSession } from '../ser
 import { useAuth } from '../contexts/AuthContext';
 import { normalizeAuthUser } from '../utils/authStorage';
 
-/* ─────────────────────────────────────────────────────────────
-   SVG ICON — inline, stroke-based
-───────────────────────────────────────────────────────────── */
+
 const Ic = ({ d, size = 20, color = 'currentColor', fill = 'none', sw = 1.8, className = '' }) => (
     <svg
         width={size}
@@ -46,9 +44,7 @@ const I = {
     lock: ['M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2z', 'M7 11V7a5 5 0 0 1 10 0v4'],
 };
 
-/* ─────────────────────────────────────────────────────────────
-   SPOTIFY MARK
-───────────────────────────────────────────────────────────── */
+
 const SpotifyMark = ({ size = 20 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" className="inline-block shrink-0">
         <circle cx="12" cy="12" r="12" fill="#1ED760" />
@@ -99,9 +95,7 @@ const createOauthState = () => {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 };
 
-/* ─────────────────────────────────────────────────────────────
-   LEFT PANEL — MINI WAVEFORM
-───────────────────────────────────────────────────────────── */
+
 const MiniWave = () => {
     const bars = [
         { h: 'h-[28%]', opacity: 'opacity-[0.45]', delayClass: '[animation-delay:0s]', color: 'bg-[#FF6B5E]' },
@@ -129,9 +123,7 @@ const MiniWave = () => {
     );
 };
 
-/* ═════════════════════════════════════════════════════════════
-   PAGE
-═════════════════════════════════════════════════════════════ */
+
 export default function LoginPage() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -214,7 +206,7 @@ export default function LoginPage() {
         }
     };
 
-    /* ── 콜백 로딩 풀스크린 ── */
+
     if (loading || demoLoading) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-[#FAF8F4] font-[Pretendard,system-ui,sans-serif]">
@@ -229,21 +221,19 @@ export default function LoginPage() {
         );
     }
 
-    /* ── 메인 렌더 ── */
+
     return (
         <div className="min-h-screen bg-[#FAF8F4] font-[Pretendard,system-ui,sans-serif] antialiased overflow-x-hidden">
-            {/* 2-col 그리드 */}
+
             <div className="grid grid-cols-1 md:grid-cols-2 min-h-screen">
-                {/* ════════════════════════════════
-            왼쪽 다크 패널  (md 이상 표시)
-        ════════════════════════════════ */}
+
                 <aside className="hidden md:flex flex-col justify-between bg-[#211C26] px-12 py-11 relative overflow-hidden">
-                    {/* 배경 그라디언트 */}
+
                     <div
                         className="absolute inset-0 pointer-events-none bg-[radial-gradient(60%_60%_at_20%_80%,rgba(123,127,240,0.22)_0%,transparent_70%),radial-gradient(40%_50%_at_80%_10%,rgba(255,107,94,0.15)_0%,transparent_70%)]"
                     />
 
-                    {/* 로고 */}
+
                     <Link to="/" className="relative z-10 flex items-center gap-[9px] no-underline w-fit">
                         <div
                             className="w-[34px] h-[34px] rounded-[10px] flex items-center justify-center shrink-0 bg-[linear-gradient(135deg,#FF6B5E_0%,#7B7FF0_100%)]"
@@ -253,7 +243,7 @@ export default function LoginPage() {
                         <span className="text-[18px] font-extrabold tracking-[-0.03em] text-[#FAF8F4]">Mood Sync</span>
                     </Link>
 
-                    {/* 카피 + 기능 목록 */}
+
                     <div className="relative z-10">
                         <MiniWave />
 
@@ -273,7 +263,7 @@ export default function LoginPage() {
                             Spotify 계정을 연결하면 바로 들을 수 있어요.
                         </p>
 
-                        {/* 기능 3개 */}
+
                         <div className="flex flex-col gap-5">
                             {[
                                 {
@@ -315,32 +305,30 @@ export default function LoginPage() {
                         </div>
                     </div>
 
-                    {/* 면책 문구 */}
+
                     <p className="relative z-10 text-[11.5px] leading-[1.6] text-[rgba(250,248,244,0.28)]">
                         Mood Sync는 Spotify와 제휴 관계가 아니에요.
                         <br />곡 정보의 출처는 Spotify이며, 권리는 각 권리자에게 있어요.
                     </p>
                 </aside>
 
-                {/* ════════════════════════════════
-            오른쪽 패널
-        ════════════════════════════════ */}
+
                 <main className="relative flex flex-col items-center justify-center overflow-hidden px-6 py-14 sm:px-12 md:px-14 min-h-screen">
-                    {/* ── 배경 감정 오브 ── */}
+
                     <div aria-hidden="true" className="absolute inset-0 pointer-events-none overflow-hidden">
-                        {/* Joy orb */}
+
                         <div
                             className="absolute -top-[8%] -right-[12%] w-[420px] h-[420px] rounded-full bg-[radial-gradient(circle,rgba(255,107,94,0.16)_0%,transparent_70%)] [animation:ms-orb_9s_ease-in-out_infinite]"
                         />
-                        {/* Calm orb */}
+
                         <div
                             className="absolute -bottom-[10%] -left-[14%] w-[460px] h-[460px] rounded-full bg-[radial-gradient(circle,rgba(123,127,240,0.13)_0%,transparent_70%)] [animation:ms-orb_12s_ease-in-out_infinite_reverse] [animation-delay:-3s]"
                         />
-                        {/* Warm orb */}
+
                         <div
                             className="absolute top-[40%] left-[30%] w-[300px] h-[300px] rounded-full bg-[radial-gradient(circle,rgba(255,182,72,0.09)_0%,transparent_70%)] [animation:ms-orb_15s_ease-in-out_infinite] [animation-delay:-6s]"
                         />
-                        {/* Noise texture */}
+
                         <svg className="absolute inset-0 w-full h-full opacity-[0.022]">
                             <filter id="ms-noise">
                                 <feTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" />
@@ -350,7 +338,7 @@ export default function LoginPage() {
                         </svg>
                     </div>
 
-                    {/* ── 모바일 상단 바 (md 미만) ── */}
+
                     <div className="md:hidden absolute top-0 left-0 right-0 flex items-center justify-between px-6 py-5 z-10">
                         <Link to="/" className="flex items-center gap-2 no-underline">
                             <div
@@ -371,15 +359,15 @@ export default function LoginPage() {
                         </Link>
                     </div>
 
-                    {/* ── 로그인 콘텐츠 ── */}
+
                     <div className="relative z-10 w-full max-w-[400px]">
-                        {/* 서비스 뱃지 */}
+
                         <div className="ms-fu inline-flex items-center gap-[7px] text-[12px] font-bold text-[#6E6678] bg-white border border-[#E5DFD3] rounded-full px-[14px] py-[6px] pl-[10px] mb-8 shadow-[0_2px_8px_rgba(33,28,38,0.06)] [animation-delay:0.05s]">
                             <Ic d={I.sparkles} size={13} color="#FF6B5E" />
                             감정 기반 음악 추천
                         </div>
 
-                        {/* 헤드라인 */}
+
                         <h1 className="ms-fu text-[clamp(28px,3.2vw,38px)] font-extrabold tracking-[-0.035em] leading-[1.18] text-[#211C26] mb-[14px] [animation-delay:0.12s]">
                             오늘 기분,
                             <br />
@@ -388,14 +376,14 @@ export default function LoginPage() {
                             </span>
                         </h1>
 
-                        {/* 서브 카피 */}
+
                         <p className="ms-fu text-[15.5px] text-[#6E6678] leading-[1.7] mb-10 max-w-[340px] [animation-delay:0.2s]">
                             Spotify 계정 하나로 시작해요.
                             <br />
                             기분을 고르면 그에 맞는 곡을 바로 들을 수 있어요.
                         </p>
 
-                        {/* 에러 배너 */}
+
                         {error && (
                             <div className="ms-fu flex items-start gap-[10px] bg-[#FFEAE6] border border-[rgba(255,107,94,0.22)] rounded-2xl px-4 py-[13px] mb-6">
                                 <Ic d={I.alertCircle} size={15} color="#FF6B5E" className="mt-[1px] shrink-0" />
@@ -403,7 +391,7 @@ export default function LoginPage() {
                             </div>
                         )}
 
-                        {/* ── CTA 버튼 ── */}
+
                         <div className="ms-fu [animation-delay:0.28s]">
                             <button
                                 type="button"
@@ -420,7 +408,7 @@ export default function LoginPage() {
                                         : 'cursor-pointer hover:-translate-y-[3px] hover:shadow-[0_20px_48px_-12px_rgba(25,20,20,0.38),0_0_0_1px_rgba(30,215,96,0.35)]',
                                 ].join(' ')}
                             >
-                                {/* Spotify Green 라인 — 버튼 하단 */}
+
                                 <div className="absolute bottom-0 left-[20%] right-[20%] h-[2px] rounded-full bg-[#1ED760] opacity-50 group-hover:opacity-90 transition-opacity duration-200" />
                                 <SpotifyMark size={22} />
                                 Spotify로 계속하기
@@ -495,7 +483,7 @@ export default function LoginPage() {
                             </p>
                         </div>
 
-                        {/* 권한 배지 3개 */}
+
                         <div className="ms-fu flex flex-wrap gap-2 mt-5 [animation-delay:0.52s]">
                             {['프로필 읽기', '재생 제어', '목록 생성'].map((label) => (
                                 <span
@@ -508,7 +496,7 @@ export default function LoginPage() {
                             ))}
                         </div>
 
-                        {/* 구분선 + 보안 문구 */}
+
                         <div className="ms-fu flex items-center gap-[10px] my-7 [animation-delay:0.58s]">
                             <div className="flex-1 h-px bg-[#E5DFD3]" />
                             <div className="flex items-center gap-[6px]">
@@ -520,7 +508,7 @@ export default function LoginPage() {
                             <div className="flex-1 h-px bg-[#E5DFD3]" />
                         </div>
 
-                        {/* Spotify 출처 + 홈 링크 */}
+
                         <div className="ms-fu flex items-center justify-between flex-wrap gap-3 [animation-delay:0.64s]">
                             <div className="flex items-center gap-[6px]">
                                 <SpotifyMark size={14} />

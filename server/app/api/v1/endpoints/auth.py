@@ -66,7 +66,7 @@ def demo_start(
         value=str(demo_user.id),
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.cookie_secure,
         max_age=60 * 60 * 24 * 30,
         path="/",
     )
@@ -75,7 +75,7 @@ def demo_start(
         value="demo",
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.cookie_secure,
         max_age=60 * 60 * 24 * 30,
         path="/",
     )
@@ -180,7 +180,7 @@ def spotify_callback(
         value=str(user_record.id),
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.cookie_secure,
         max_age=60 * 60 * 24 * 30,
         path="/",
     )
@@ -189,7 +189,7 @@ def spotify_callback(
         value="spotify",
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.cookie_secure,
         max_age=60 * 60 * 24 * 30,
         path="/",
     )
@@ -198,7 +198,7 @@ def spotify_callback(
         value=token_payload["access_token"],
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.cookie_secure,
         max_age=int(token_payload.get("expires_in", 3600)),
         path="/",
     )
@@ -209,7 +209,7 @@ def spotify_callback(
             value=refresh_token,
             httponly=True,
             samesite="lax",
-            secure=False,
+            secure=settings.cookie_secure,
             max_age=60 * 60 * 24 * 30,
             path="/",
         )

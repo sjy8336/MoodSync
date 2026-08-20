@@ -4,13 +4,9 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { getFavorites, removeFavorite } from '../services/apiClient';
 
-/* ─────────────────────────────────────────────
-   API 로직
-───────────────────────────────────────────── */
 
-/* ─────────────────────────────────────────────
-   ICON
-───────────────────────────────────────────── */
+
+
 const Ic = ({ d, size = 20, color = 'currentColor', fill = 'none', sw = 1.8, className = '' }) => (
     <svg
         width={size}
@@ -60,9 +56,7 @@ const I = {
     x: 'M18 6 6 18M6 6l12 12',
 };
 
-/* ─────────────────────────────────────────────
-   SPOTIFY MARK
-───────────────────────────────────────────── */
+
 const SpotifyMark = ({ size = 14 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" className="inline-block shrink-0">
         <circle cx="12" cy="12" r="12" fill="#1ED760" />
@@ -73,9 +67,7 @@ const SpotifyMark = ({ size = 14 }) => (
     </svg>
 );
 
-/* ─────────────────────────────────────────────
-   MOOD 매핑
-───────────────────────────────────────────── */
+
 const MOOD_MAP = {
     happy: { label: '기쁨', icon: I.smile, color: '#FF6B5E', soft: '#FFEAE6' },
     excited: { label: '설렘', icon: I.sparkle, color: '#FFB648', soft: '#FFF3DE' },
@@ -135,9 +127,7 @@ const getTextColorClass = (color) => {
 const getMoodChipClass = (soft, color) => `${getSoftBgClass(soft)} ${getTextColorClass(color)}`;
 const getAnimationDelayClass = (seconds) => `[animation-delay:${seconds}s]`;
 
-/* ─────────────────────────────────────────────
-   날짜 포맷
-───────────────────────────────────────────── */
+
 const formatSavedAt = (dateStr) => {
     if (!dateStr) return null;
     const d = new Date(dateStr);
@@ -151,9 +141,7 @@ const formatSavedAt = (dateStr) => {
     return d.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
 };
 
-/* ─────────────────────────────────────────────
-   TOAST — 좋아요 취소 시 하단 팝업
-───────────────────────────────────────────── */
+
 const UnlikeToast = ({ visible, onClose }) => (
     <div
         className={`fixed bottom-7 left-1/2 z-[9999] flex items-center gap-2.5 whitespace-nowrap rounded-full bg-[#211C26] px-[18px] py-[11px] pl-[14px] text-[13.5px] font-semibold text-white shadow-[0_8px_32px_-8px_rgba(33,28,38,0.32)] transition-all duration-200 ${
@@ -175,9 +163,7 @@ const UnlikeToast = ({ visible, onClose }) => (
     </div>
 );
 
-/* ─────────────────────────────────────────────
-   ALBUM COVER — 두 번째 코드 스타일 참고
-───────────────────────────────────────────── */
+
 const AlbumCover = ({ track, className = '', roundedClass = 'rounded-[10px]', iconSize = 14 }) => {
     const [imageFailed, setImageFailed] = useState(false);
     const hasImage = Boolean(track.album_image_url) && !imageFailed;
@@ -201,9 +187,7 @@ const AlbumCover = ({ track, className = '', roundedClass = 'rounded-[10px]', ic
     );
 };
 
-/* ─────────────────────────────────────────────
-   DUMMY DATA (API 연동 전 목업)
-───────────────────────────────────────────── */
+
 const DUMMY_TRACKS = [
     {
         track_id: '1',
@@ -283,9 +267,7 @@ const MOOD_FILTERS = [
     { key: 'nostalgic', label: '그리움' },
 ];
 
-/* ─────────────────────────────────────────────
-   TRACK CARD  (리스트 형태)
-───────────────────────────────────────────── */
+
 const FavoriteCard = ({ track, onUnlike }) => {
     const moodInfo = getMoodInfo(track.mood);
     const savedLabel = formatSavedAt(track.saved_at);
@@ -297,7 +279,7 @@ const FavoriteCard = ({ track, onUnlike }) => {
     return (
         <article className="bg-white border border-[#E5DFD3] rounded-2xl overflow-hidden transition-all duration-200 hover:border-[#D6CFC1] hover:shadow-[0_8px_28px_-8px_rgba(33,28,38,0.10)] group">
             <div className="flex items-stretch">
-                {/* 앨범 커버 */}
+
                         <a
                             href={track.spotify_url || '#'}
                             target="_blank"
@@ -308,7 +290,7 @@ const FavoriteCard = ({ track, onUnlike }) => {
                             <AlbumCover track={track} className="w-16 h-16" roundedClass="rounded-[10px]" iconSize={18} />
                         </a>
 
-                {/* 트랙 정보 */}
+
                 <div className="flex-1 min-w-0 flex flex-col justify-center gap-[3px] pr-3 py-3">
                     {track.spotify_url ? (
                         <a
@@ -338,7 +320,7 @@ const FavoriteCard = ({ track, onUnlike }) => {
                         <span className="text-[13px] text-[#6E6678] truncate block">{track.artist_name}</span>
                     )}
 
-                    {/* 감정 태그 + 저장일 + Provided by Spotify */}
+
                     <div className="flex flex-wrap items-center gap-1.5 mt-1">
                         <span
                             className={`inline-flex items-center gap-1 rounded-full px-2 py-[2px] text-[11px] font-semibold ${getMoodChipClass(moodInfo.soft, moodInfo.color)}`}
@@ -359,7 +341,7 @@ const FavoriteCard = ({ track, onUnlike }) => {
                     </div>
                 </div>
 
-                {/* 액션 */}
+
                 <div className="flex flex-col items-center justify-center gap-2 px-3 shrink-0">
                     <button
                         type="button"
@@ -390,7 +372,7 @@ const FavoriteCard = ({ track, onUnlike }) => {
                 </div>
             </div>
 
-            {/* 추천 이유 — 베이지 배경 제거, 얇은 구분선만 */}
+
             {track.reason && (
                 <div className="flex items-start gap-2 px-4 py-2.5 border-t border-[#EEEBE4]">
                     <Ic d={I.bulb} size={12} color="#7B7FF0" className="mt-[3px] shrink-0" />
@@ -401,9 +383,7 @@ const FavoriteCard = ({ track, onUnlike }) => {
     );
 };
 
-/* ─────────────────────────────────────────────
-   EMPTY STATE
-───────────────────────────────────────────── */
+
 const EmptyState = () => (
     <div className="bg-white border border-[#E5DFD3] rounded-[28px] p-10 min-[560px]:p-14 text-center shadow-[0_8px_40px_-12px_rgba(33,28,38,0.08)] max-w-md mx-auto mt-4">
         <div className="w-14 h-14 rounded-2xl bg-[#FFEAE6] flex items-center justify-center mx-auto mb-5">
@@ -423,9 +403,7 @@ const EmptyState = () => (
     </div>
 );
 
-/* ═════════════════════════════════════════════
-   PAGE
-═════════════════════════════════════════════ */
+
 export default function FavoritesPage() {
     const [tracks, setTracks] = useState([]);
     const [activeMood, setActiveMood] = useState('all');
@@ -434,7 +412,7 @@ export default function FavoritesPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
 
-    /* 토스트 상태 */
+
     const [toastVisible, setToastVisible] = useState(false);
     const [toastTimer, setToastTimer] = useState(null);
 
@@ -463,7 +441,7 @@ export default function FavoritesPage() {
         };
     }, []);
 
-    /* 좋아요 취소 핸들러 — 서버 반영 후 목록에서 제거 */
+
     const handleUnlike = async (trackId) => {
         try {
             await removeFavorite(trackId);
@@ -485,7 +463,7 @@ export default function FavoritesPage() {
         [toastTimer]
     );
 
-    /* 필터 + 검색 */
+
     const filtered = tracks.filter((t) => {
         const matchMood = activeMood === 'all' || t.mood === activeMood;
         const query = searchQuery.trim().toLowerCase();
@@ -494,7 +472,7 @@ export default function FavoritesPage() {
         return matchMood && matchQuery;
     });
 
-    /* 감정별 곡 수 */
+
     const moodCounts = tracks.reduce((acc, t) => {
         acc[t.mood] = (acc[t.mood] || 0) + 1;
         return acc;
@@ -502,7 +480,7 @@ export default function FavoritesPage() {
 
     return (
         <div className="font-[Pretendard,system-ui,sans-serif] bg-[#FAF8F4] text-[#211C26] antialiased overflow-x-hidden min-h-screen">
-            {/* 토스트 */}
+
             <UnlikeToast visible={toastVisible} onClose={() => setToastVisible(false)} />
 
             <Header />
@@ -519,7 +497,7 @@ export default function FavoritesPage() {
                             {loadError}
                         </div>
                     )}
-                    {/* ── 페이지 헤더 ── */}
+
                     <div
                         className={`fav-fu flex flex-wrap items-start justify-between gap-4 mb-8 ${getAnimationDelayClass(0.03)}`}
                     >
@@ -564,7 +542,7 @@ export default function FavoritesPage() {
                         <EmptyState />
                     ) : (
                         <>
-                            {/* ── 감정별 통계 바 ── */}
+
                             <div className={`fav-fu mb-5 ${getAnimationDelayClass(0.06)}`}>
                                 <div className="grid grid-cols-2 min-[560px]:grid-cols-4 min-[900px]:grid-cols-4 gap-3">
                                     {Object.entries(
@@ -607,7 +585,7 @@ export default function FavoritesPage() {
                                 </div>
                             </div>
 
-                            {/* ── 필터 + 검색 + 뷰 토글 바 ── */}
+
                             <div className={`fav-fu flex flex-wrap items-center gap-2.5 mb-5 ${getAnimationDelayClass(0.09)}`}>
                                 <div className="flex items-center gap-1.5 flex-wrap flex-1">
                                     {MOOD_FILTERS.map((f) => (
@@ -664,7 +642,7 @@ export default function FavoritesPage() {
                                 </div>
                             </div>
 
-                            {/* ── 결과 수 ── */}
+
                             {(activeMood !== 'all' || searchQuery) && (
                                 <p className="text-[12.5px] text-[#A39CAC] mb-3 px-0.5">
                                     {filtered.length}개의 곡
@@ -673,7 +651,7 @@ export default function FavoritesPage() {
                                 </p>
                             )}
 
-                            {/* ── 트랙 목록 ── */}
+
                             <div className={`fav-fu ${getAnimationDelayClass(0.12)}`}>
                                 {filtered.length === 0 ? (
                                     <div className="bg-white border border-[#E5DFD3] rounded-2xl px-6 py-10 text-center">
@@ -707,7 +685,7 @@ export default function FavoritesPage() {
                                 )}
                             </div>
 
-                            {/* ── 하단 Spotify 출처 + CTA ── */}
+
                             <div
                                 className={`fav-fu mt-8 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-[#E5DFD3] bg-white px-5 py-4 ${getAnimationDelayClass(0.15)}`}
                             >
@@ -726,7 +704,7 @@ export default function FavoritesPage() {
                                 </a>
                             </div>
 
-                            {/* ── 추천 개선 안내 CTA ── */}
+
                             <div
                                 className={`fav-fu mt-4 flex flex-col items-start justify-between gap-5 rounded-[24px] border border-[#E5DFD3] bg-gradient-to-br from-[#FFEAE6] via-[#FAF8F4] to-[#ECEDFD] px-6 py-7 min-[560px]:px-8 min-[560px]:py-8 min-[700px]:flex-row min-[700px]:items-center ${getAnimationDelayClass(0.18)}`}
                             >
@@ -760,9 +738,7 @@ export default function FavoritesPage() {
     );
 }
 
-/* ─────────────────────────────────────────────
-   COMPACT CARD (그리드 뷰용)
-───────────────────────────────────────────── */
+
 function CompactCard({ track, onUnlike, index }) {
     const moodInfo = getMoodInfo(track.mood);
     const savedLabel = formatSavedAt(track.saved_at);
@@ -775,7 +751,7 @@ function CompactCard({ track, onUnlike, index }) {
         <article
             className={`fav-fu bg-white border border-[#E5DFD3] rounded-2xl overflow-hidden transition-all duration-200 hover:border-[#D6CFC1] hover:shadow-[0_8px_24px_-8px_rgba(33,28,38,0.10)] hover:-translate-y-0.5 ${getAnimationDelayClass((0.03 * index).toFixed(2))}`}
         >
-            {/* 앨범 커버 — 정방형, 라운드 없이 카드 상단에 꽉 채움 */}
+
             <a
                 href={track.spotify_url || '#'}
                 target="_blank"

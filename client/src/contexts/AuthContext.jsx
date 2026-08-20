@@ -2,7 +2,15 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import { getCurrentUser } from '../services/apiClient';
 import { clearStoredAuthUser, getStoredAuthUser, normalizeAuthUser, setStoredAuthUser } from '../utils/authStorage';
 
-const AuthContext = createContext(null);
+const defaultAuthValue = {
+    user: null,
+    ready: true,
+    isAuthenticated: false,
+    login: () => {},
+    logout: () => {},
+};
+
+const AuthContext = createContext(defaultAuthValue);
 
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
@@ -57,8 +65,5 @@ export function AuthProvider({ children }) {
 
 export function useAuth() {
     const context = useContext(AuthContext);
-    if (!context) {
-        throw new Error('useAuth must be used within AuthProvider');
-    }
     return context;
 }

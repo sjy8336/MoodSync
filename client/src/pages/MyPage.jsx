@@ -194,7 +194,7 @@ export default function MyPage() {
         try {
             await logoutAccount();
         } catch {
-            // 서버 쿠키 정리가 실패하더라도 로컬 로그아웃은 보장한다.
+            void 0;
         } finally {
             logout();
             navigate('/login', { replace: true });
@@ -208,7 +208,7 @@ export default function MyPage() {
             <Header />
 
             <main className="max-w-[760px] mx-auto px-5 sm:px-7 md:px-8 pt-24 md:pt-28 pb-24 md:pb-20">
-                {/* ── 프로필 헤더 ── */}
+
                 <section className="flex items-center gap-4 mb-6">
                     <div className="w-16 h-16 rounded-full flex items-center justify-center text-[22px] font-extrabold text-white shrink-0 bg-[linear-gradient(135deg,#FF6B5E_0%,#7B7FF0_100%)]">
                         {initial}
@@ -230,7 +230,7 @@ export default function MyPage() {
                     </div>
                 </section>
 
-                {/* ── 통계 카드 ── */}
+
                 <section className="grid grid-cols-3 gap-2.5 sm:gap-3 mb-8">
                     <StatCard
                         icon={I.calHeart}
@@ -249,7 +249,7 @@ export default function MyPage() {
                     <StatCard icon={I.flame} color="#FFB648" soft="#FFF3DE" value={streak ?? '–'} label="연속 기록일" />
                 </section>
 
-                {/* ── 좋아요한 곡 미리보기 (Spotify 정책 준수) ── */}
+
                 <section className="mb-8">
                     <div className="flex items-center justify-between mb-3">
                         <h2 className="text-[15px] font-bold text-[#211C26] flex items-center gap-2">
@@ -311,7 +311,7 @@ export default function MyPage() {
                     )}
                 </section>
 
-                {/* ── 설정 ── */}
+
                 <section className="mb-8">
                     <h2 className="text-[13px] font-bold text-[#A39CAC] uppercase tracking-[0.06em] mb-2 px-1">
                         계정 및 설정
@@ -331,7 +331,7 @@ export default function MyPage() {
                     </div>
                 </section>
 
-                {/* ── 모바일 전용 하단 nav ── */}
+
                 <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5DFD3] z-40 flex">
                     {[
                         { to: '/home', label: '홈', icon: I.waveform },

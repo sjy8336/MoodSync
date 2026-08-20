@@ -24,18 +24,14 @@ const T = {
     spotBlack: '#191414',
 };
 
-/* ───────────────────────────────────────────
-   레이아웃 스케일 — radius/spacing 임의값 난립 방지용 단일 소스
-─────────────────────────────────────────── */
+
 const RADIUS = {
     sm: 'rounded-[14px]', // 인용 카드, 배지 등 작은 요소
     md: 'rounded-[20px]', // 카드, 패널, 액션바 (기본 컴포넌트 단위)
     lg: 'rounded-[24px]', // Empty/Skeleton 등 페이지 레벨 컨테이너
 };
 
-/* ───────────────────────────────────────────
-   ICONS
-─────────────────────────────────────────── */
+
 const Ic = ({ d, size = 20, color = 'currentColor', fill = 'none', sw = 1.8, className = '' }) => (
     <svg
         width={size}
@@ -77,9 +73,7 @@ const I = {
     arrowR: 'M5 12h14M12 5l7 7-7 7',
 };
 
-/* ───────────────────────────────────────────
-   SPOTIFY MARK  (공식, 변형 금지)
-─────────────────────────────────────────── */
+
 const SpotifyMark = ({ size = 18 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" className="inline-block shrink-0">
         <circle cx="12" cy="12" r="12" fill="#1ED760" />
@@ -90,9 +84,7 @@ const SpotifyMark = ({ size = 18 }) => (
     </svg>
 );
 
-/* ───────────────────────────────────────────
-   RESPONSIVE HOOK  (랜딩 페이지와 완전 동일)
-─────────────────────────────────────────── */
+
 const useBreakpoint = () => {
     const [bp, setBp] = useState('desktop');
     useEffect(() => {
@@ -107,9 +99,7 @@ const useBreakpoint = () => {
     return bp;
 };
 
-/* ───────────────────────────────────────────
-   SESSION LOGIC
-─────────────────────────────────────────── */
+
 const STORAGE_KEY = 'mood-sync:last-recommendation';
 
 const formatDuration = (durationMs) => {
@@ -134,12 +124,12 @@ const saveState = (state) => {
     if (typeof window === 'undefined') return;
     try {
         window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {}
+    } catch {
+        void 0;
+    }
 };
 
-/* ───────────────────────────────────────────
-   LINK BUTTON  — 랜딩의 BtnGhost와 동일한 feel
-─────────────────────────────────────────── */
+
 function LinkBtn({ to, children }) {
     const [hov, setHov] = useState(false);
     return (
@@ -158,10 +148,7 @@ function LinkBtn({ to, children }) {
     );
 }
 
-/* ───────────────────────────────────────────
-   MOOD MAP  — MoodInputPage의 MOOD_OPTIONS와 동일한 매핑
-   영문 value → 한글 라벨 + 감정 컬러 테마
-─────────────────────────────────────────── */
+
 const MOOD_MAP = {
     happy: { label: '기쁨', color: '#FF6B5E', soft: '#FFEAE6' },
     excited: { label: '설렘', color: '#FFB648', soft: '#FFF3DE' },
@@ -175,11 +162,7 @@ const MOOD_MAP = {
 
 const DEFAULT_THEME = { color: '#7B7FF0', soft: '#ECEDFD', label: '오늘의 감정' };
 
-/**
- * 감정 테마 조회
- * - MOOD_MAP에 등록된 영문 value면 한글 라벨 + 컬러로 변환
- * - 이미 한글이거나 매핑이 없으면 원문 그대로 라벨로 사용 (서버가 한글을 줄 수도 있으므로)
- */
+
 const getMoodTheme = (mood) => {
     if (!mood) return DEFAULT_THEME;
     if (MOOD_MAP[mood]) return { ...MOOD_MAP[mood] };
@@ -188,12 +171,7 @@ const getMoodTheme = (mood) => {
     return { ...DEFAULT_THEME, label: mood };
 };
 
-/**
- * hex 컬러를 흰색과 섞어 "옅지만 여전히 유채색인" 밝은 변형을 만든다.
- * theme.soft(예: #FFEAE6)는 채도가 거의 없는 파스텔이라, 크림색 페이지 배경(#FAF8F4)
- * 위에서 그라디언트 텍스트에 쓰면 거의 흰 글자처럼 묻혀버린다. 그래서 하이라이트 색만
- * 별도로 계산해서 채도를 충분히 남긴다 (ratio가 클수록 원래 색에 가까움).
- */
+
 const mixWithWhite = (hex, ratio) => {
     const c = hex.replace('#', '');
     const r = parseInt(c.substring(0, 2), 16);
@@ -203,11 +181,7 @@ const mixWithWhite = (hex, ratio) => {
     return `rgb(${mix(r)}, ${mix(g)}, ${mix(b)})`;
 };
 
-/**
- * 추천 메시지 빌더
- * - 서버가 자연어 메시지(recommendation.message 등)를 내려주면 그대로 사용
- * - 없으면 감정 라벨 기반으로 합리적인 기본 문구를 생성 (특정 감정 문구를 하드코딩하지 않음)
- */
+
 const buildHeroMessage = (moodLabel, customMessage, trackCount) => {
     if (customMessage) return customMessage;
     if (moodLabel && moodLabel !== '오늘의 감정') {
@@ -216,13 +190,7 @@ const buildHeroMessage = (moodLabel, customMessage, trackCount) => {
     return `지금 감정에 어울리는 음악을 ${trackCount}곡 골라봤어요.`;
 };
 
-/**
- * 입력 노트 파서
- * MoodInputPage가 보내는 payload.text는
- *   "{자유 텍스트} 원하는 분위기: {태그1}, {태그2}." 형태로 합쳐져 있음.
- * 이 함수는 그 합쳐진 문자열을 받아 자유 텍스트와 분위기 태그 배열로 다시 분리한다.
- * 패턴이 없는 입력(자유 텍스트만 있거나 비어 있는 경우)도 그대로 처리한다.
- */
+
 const VIBE_PATTERN = /\s*원하는\s*분위기\s*:\s*([^.]*)\.?\s*$/;
 
 const parseInputNote = (rawNote) => {
@@ -240,10 +208,7 @@ const parseInputNote = (rawNote) => {
     return { freeText, vibes };
 };
 
-/**
- * 생성 시각 포맷터 — "2026년 6월 28일 · 오후 3:42" 형식
- * 서버가 생성 시각을 안 주면 페이지가 로드된 시점(클라이언트 현재 시각)을 사용한다.
- */
+
 const formatGeneratedAt = (dateInput) => {
     const d = dateInput ? new Date(dateInput) : new Date();
     if (Number.isNaN(d.getTime())) return '';
@@ -260,10 +225,7 @@ const formatGeneratedAt = (dateInput) => {
     return `${year}년 ${month}월 ${date}일 · ${period} ${hours}:${minutes}`;
 };
 
-/* ───────────────────────────────────────────
-   THEME CLASS LOOKUP  — 감정별 클래스를 한 곳에서 관리
-   (이전엔 getThemeBgClass/TextClass/SoftClass/BorderAccentClass 4개로 중복돼 있던 걸 통합)
-─────────────────────────────────────────── */
+
 const THEME_CLASSES = {
     '#FF6B5E': { bg: 'bg-[#FF6B5E]', text: 'text-[#FF6B5E]', soft: 'bg-[#FFEAE6]', border: 'border-l-[#FF6B5E]' },
     '#FFB648': { bg: 'bg-[#FFB648]', text: 'text-[#FFB648]', soft: 'bg-[#FFF3DE]', border: 'border-l-[#FFB648]' },
@@ -278,11 +240,7 @@ const THEME_DEFAULT_CLASSES = {
 
 const getThemeClasses = (color) => THEME_CLASSES[color] || THEME_DEFAULT_CLASSES;
 
-/* ───────────────────────────────────────────
-   SIDE PANEL  — 오른쪽 컨텍스트 패널 (sticky)
-   화이트 배경 단일톤, 얇은 구분선으로만 구역을 나눔 (베이지 박스 사용 안 함)
-   구역: 헤더(생성 시각) → 선택한 감정 → 원하는 분위기 → 직접 입력한 내용 → 추천 메시지 → 곡별 추천 이유
-─────────────────────────────────────────── */
+
 const PanelLabel = ({ children }) => (
     <p className="mb-2.5 text-[11px] font-semibold uppercase tracking-[0.07em] text-[#A39CAC]">{children}</p>
 );
@@ -306,7 +264,7 @@ const SidePanel = ({
 
     return (
         <div className={`${RADIUS.md} border border-[#E5DFD3] bg-white ${isNarrow ? 'static' : 'sticky top-6'}`}>
-            {/* ── 패널 헤더: 이게 뭔지 + 생성 시각 ── */}
+
             <div className={`flex flex-wrap items-center justify-between gap-2.5 py-[18px] ${padXClass}`}>
                 <span className="flex items-center gap-1.5 text-[13px] font-bold tracking-[-0.01em] text-[#211C26]">
                     <span className={`h-[7px] w-[7px] shrink-0 rounded-full ${cls.bg}`} />
@@ -323,7 +281,7 @@ const SidePanel = ({
             <div className={`h-px bg-[#E5DFD3] ${dividerClass}`} />
 
             <div className={`py-5 ${padXClass}`}>
-                {/* ── 선택한 감정 ── */}
+
                 <div className={hasInputDetails ? 'mb-[22px]' : 'mb-0'}>
                     <PanelLabel>선택한 감정</PanelLabel>
                     <span
@@ -333,7 +291,7 @@ const SidePanel = ({
                     </span>
                 </div>
 
-                {/* ── 원하는 분위기 ── */}
+
                 {vibes.length > 0 && (
                     <div className="mb-[22px]">
                         <PanelLabel>원하는 분위기</PanelLabel>
@@ -350,8 +308,7 @@ const SidePanel = ({
                     </div>
                 )}
 
-                {/* ── 직접 입력한 내용 ──
-                    좌측에 감정 메인 컬러 보더 + 소프트 컬러 배경을 은은하게 깐 "인용 카드" 형태. */}
+
                 {freeText && (
                     <div className="mb-1">
                         <PanelLabel>직접 입력한 내용</PanelLabel>
@@ -363,7 +320,7 @@ const SidePanel = ({
                     </div>
                 )}
 
-                {/* 입력 정보가 감정 선택뿐이었던 경우 안내 */}
+
                 {!hasInputDetails && (
                     <p className="m-0 text-[12.5px] leading-[1.6] text-[#6E6678]">감정 선택만으로 추천했어요.</p>
                 )}
@@ -371,7 +328,7 @@ const SidePanel = ({
 
             <div className={`h-px bg-[#E5DFD3] ${dividerClass}`} />
 
-            {/* ── 추천 한 줄 메시지 ── */}
+
             <div className={`py-[18px] ${padXClass}`}>
                 {isReasonLoading ? (
                     <div className="space-y-2" aria-label="추천 요약 생성 중">
@@ -385,8 +342,7 @@ const SidePanel = ({
 
             <div className={`h-px bg-[#E5DFD3] ${dividerClass}`} />
 
-            {/* ── 곡별 추천 이유 ──
-                번호를 감정 소프트 컬러 배경의 원형 배지로, 숫자 텍스트는 감정 메인 컬러로 통일. */}
+
             <div className={`${padXClass} pt-5 ${isMobile ? 'pb-5' : 'pb-6'}`}>
                 <PanelLabel>왜 이 곡들일까요</PanelLabel>
 
@@ -419,10 +375,7 @@ const SidePanel = ({
     );
 };
 
-/* ───────────────────────────────────────────
-   ALBUM COVER  — 원본 유지, 변형·오버레이 없음
-   fallback 그라디언트는 현재 감정의 soft 컬러를 반영 (이전엔 고정 3색이라 감정과 무관했음)
-─────────────────────────────────────────── */
+
 const AlbumCover = ({ track, size, theme }) => {
     const [imageFailed, setImageFailed] = useState(false);
     const hasAlbumImage = Boolean(track.album_image_url) && !imageFailed;
@@ -461,13 +414,7 @@ const AlbumCover = ({ track, size, theme }) => {
     );
 };
 
-/* ───────────────────────────────────────────
-   TRACK CARD  (Spotify 정책 준수)
-   - 앨범 커버 원본 유지 (변형·오버레이 없음, 라운드 처리만)
-   - 곡명·아티스트·앨범커버 → Spotify 링크
-   - "Provided by Spotify" 명시
-   - 추천 이유를 카드의 1등 요소로 — 말풍선 형태로 항상 펼쳐서 보여줌
-─────────────────────────────────────────── */
+
 const TrackCard = ({ track, index, isMobile, theme, moodKey, initialLiked = false, onLike, onUnlike }) => {
     const [liked, setLiked] = useState(false);
     const [hov, setHov] = useState(false);
@@ -514,14 +461,14 @@ const TrackCard = ({ track, index, isMobile, theme, moodKey, initialLiked = fals
             onMouseLeave={() => setHov(false)}
             className={`${RADIUS.md} border bg-white p-5 transition-all duration-200 ${hov ? 'border-[#D6CFC1] -translate-y-0.5 shadow-[0_16px_40px_-16px_rgba(33,28,38,0.14)]' : 'border-[#E5DFD3] shadow-[0_1px_0_rgba(33,28,38,0.02)]'}`}
         >
-            {/* 메인 행 */}
+
             <div className={`flex items-center ${isMobile ? 'gap-3' : 'gap-4'}`}>
-                {/* 순번 */}
+
                 <span className="w-[18px] shrink-0 text-center text-[12px] font-bold text-[#6E6678]">
                     {String(index + 1).padStart(2, '0')}
                 </span>
 
-                {/* 앨범 커버 — Spotify 링크, 원본 유지 */}
+
                 {spotifyUrl ? (
                     <a
                         href={spotifyUrl}
@@ -536,7 +483,7 @@ const TrackCard = ({ track, index, isMobile, theme, moodKey, initialLiked = fals
                     <AlbumCover track={track} size={coverSize} theme={theme} />
                 )}
 
-                {/* 트랙 정보 */}
+
                 <div className="min-w-0 flex-1">
                     {spotifyUrl ? (
                         <a
@@ -575,7 +522,7 @@ const TrackCard = ({ track, index, isMobile, theme, moodKey, initialLiked = fals
                     </div>
                 </div>
 
-                {/* 액션 버튼 */}
+
                 <div className="flex shrink-0 items-center gap-2">
                     <button
                         onClick={handleLikeToggle}
@@ -600,7 +547,7 @@ const TrackCard = ({ track, index, isMobile, theme, moodKey, initialLiked = fals
                 </div>
             </div>
 
-            {/* Provided by Spotify */}
+
             <div className={`mt-3 flex items-center gap-1 ${isMobile ? 'ml-0' : 'ml-[34px]'}`}>
                 <SpotifyMark size={10} />
                 <span className="text-[10.5px] text-[#6E6678]">Provided by Spotify</span>
@@ -609,11 +556,7 @@ const TrackCard = ({ track, index, isMobile, theme, moodKey, initialLiked = fals
     );
 };
 
-/* ───────────────────────────────────────────
-   SKELETON  — 로딩과 결과-없음 상태를 시각적으로 분리
-   최종 레이아웃(좌: 트랙 리스트 / 우: 사이드 패널)을 그대로 흉내내서
-   로딩 → 결과 전환 시 레이아웃이 튀지 않도록 함
-─────────────────────────────────────────── */
+
 const Pulse = ({ className = '' }) => <div className={`animate-pulse rounded-[12px] bg-[#F1ECE3] ${className}`} />;
 
 const SkeletonState = ({ isMobile, isNarrow }) => (
@@ -621,7 +564,7 @@ const SkeletonState = ({ isMobile, isNarrow }) => (
         <div
             className={`grid items-start ${isNarrow ? 'grid-cols-1' : 'grid-cols-[minmax(0,1fr)_340px]'} ${isMobile ? 'gap-7' : isNarrow ? 'gap-8' : 'gap-10'}`}
         >
-            {/* 좌: 트랙 카드 스켈레톤 */}
+
             <div className={isNarrow ? 'order-2' : 'order-1'}>
                 <Pulse className="mb-3.5 h-4 w-28" />
                 <div className="flex flex-col gap-2.5">
@@ -643,7 +586,7 @@ const SkeletonState = ({ isMobile, isNarrow }) => (
                 </div>
             </div>
 
-            {/* 우: 사이드 패널 스켈레톤 */}
+
             <div className={isNarrow ? 'order-1' : 'order-2'}>
                 <div className={`${RADIUS.md} border border-[#E5DFD3] bg-white p-6`}>
                     <Pulse className="mb-5 h-4 w-24" />
@@ -659,9 +602,7 @@ const SkeletonState = ({ isMobile, isNarrow }) => (
     </div>
 );
 
-/* ───────────────────────────────────────────
-   EMPTY STATE
-─────────────────────────────────────────── */
+
 const EmptyState = ({ isMobile, title, description, ctaLabel }) => (
     <div
         className={`mx-auto max-w-[480px] ${RADIUS.lg} border border-[#E5DFD3] bg-white text-center shadow-[0_8px_32px_-12px_rgba(33,28,38,0.10)] ${isMobile ? 'px-6 py-12' : 'px-12 py-16'}`}
@@ -685,10 +626,7 @@ const EmptyState = ({ isMobile, title, description, ctaLabel }) => (
     </div>
 );
 
-/* ───────────────────────────────────────────
-   SUMMARY CHIPS  — 페이지 헤더 바로 아래, 감정/곡 수/생성 시각을 한눈에
-   (이전엔 이 정보가 우측 sticky 패널 안쪽에만 있어서 데스크톱에서 시선이 늦게 도달했음)
-─────────────────────────────────────────── */
+
 const SummaryChips = ({ moodLabel, trackCount, generatedAt }) => {
     const theme = getMoodTheme(moodLabel);
     const cls = getThemeClasses(theme.color);
@@ -715,9 +653,7 @@ const SummaryChips = ({ moodLabel, trackCount, generatedAt }) => {
     );
 };
 
-/* ═══════════════════════════════════════════
-   PAGE
-═══════════════════════════════════════════ */
+
 export default function RecommendationPage() {
     const location = useLocation();
     const persistedState = getSavedState();
@@ -735,7 +671,7 @@ export default function RecommendationPage() {
 
     const wrapClass = `mx-auto max-w-[1240px] ${isMobile ? 'px-5' : isTablet ? 'min-[560px]:px-7' : 'min-[900px]:px-10 px-5'}`;
 
-    /* ── 데이터 ── */
+
     const remoteResult = dashboardSummary
         ? {
               mood: dashboardSummary.latest_recommendation?.mood || dashboardSummary.today_mood?.mood || '',
@@ -806,7 +742,7 @@ export default function RecommendationPage() {
                         }
                     }
                 } catch {
-                    // Keep the immediate fallback result visible when refresh fails.
+                    void 0;
                 } finally {
                     attempts += 1;
                     if (attempts >= 15 && timerId) window.clearInterval(timerId);
@@ -908,10 +844,7 @@ export default function RecommendationPage() {
     const isAiCopyPending = Boolean(generationProfile.gemini_copy_pending);
     const aiCopyFailed = Boolean(generationProfile.gemini_copy_attempted) && !generationProfile.gemini_copy_succeeded;
 
-    /* Hero 타이틀 그라디언트 — 선택된 감정 컬러를 반영.
-       기존엔 밝은 지점(85%)에 theme.soft(거의 흰색에 가까운 파스텔)를 그대로 써서
-       크림색 페이지 배경 위에서 그 구간 글자가 사실상 안 보였음. mixWithWhite로
-       채도를 남긴 하이라이트 톤을 따로 만들어 대비를 유지한다. */
+
     const heroGradientHighlight = mixWithWhite(theme.color, 0.55);
     const heroGradientStyle = {
         backgroundImage: `linear-gradient(100deg, ${theme.color} 0%, ${theme.color} 35%, ${heroGradientHighlight} 85%, ${theme.color} 100%)`,
@@ -927,7 +860,7 @@ export default function RecommendationPage() {
             <Header />
 
             <main className={`relative overflow-hidden ${isMobile ? 'pt-[100px] pb-[72px]' : 'pt-[132px] pb-[120px]'}`}>
-                {/* 배경 글로우 — 선택된 감정 컬러를 살짝 반영 */}
+
                 <div
                     className="pointer-events-none absolute inset-0"
                     style={{
@@ -936,12 +869,12 @@ export default function RecommendationPage() {
                 />
 
                 <div className={`relative z-10 ${wrapClass}`}>
-                    {/* ── 페이지 헤더 ── */}
+
                     <div
                         className={`mb-5 flex flex-wrap justify-between gap-4 ${isNarrow ? 'items-start' : 'items-center'}`}
                     >
                         <div>
-                            {/* 배지 — 랜딩 hero pill badge와 동일 패턴 */}
+
                             <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-[#E5DFD3] bg-white px-3.5 py-[6px] pl-2.5 text-[12px] font-semibold text-[#6E6678]">
                                 <Ic d={I.sparkles} size={13} color={T.joy} /> 추천 결과
                             </span>
@@ -967,7 +900,7 @@ export default function RecommendationPage() {
                         </div>
                     </div>
 
-                    {/* ── 감정 · 곡 수 · 생성 시각 요약 칩 (결과가 있을 때만) ── */}
+
                     {result && (
                         <SummaryChips moodLabel={moodLabel} trackCount={tracks.length} generatedAt={generatedAtLabel} />
                     )}
@@ -985,7 +918,7 @@ export default function RecommendationPage() {
                         </div>
                     )}
 
-                    {/* ── 결과 없음 / 로딩 / 결과 ── */}
+
                     {!dashboardLoaded && !result ? (
                         <SkeletonState isMobile={isMobile} isNarrow={isNarrow} />
                     ) : !result ? (
@@ -1002,16 +935,16 @@ export default function RecommendationPage() {
                             <div
                                 className={`grid items-start ${isNarrow ? 'grid-cols-1' : 'grid-cols-[minmax(0,1fr)_340px]'} ${isMobile ? 'gap-7' : isTablet ? 'gap-8' : 'gap-10'}`}
                             >
-                                {/* ── 좌: 곡 목록 ── */}
+
                                 <div className={`${isNarrow ? 'order-2' : 'order-1'} min-w-0`}>
-                                    {/* 곡 수 라벨 */}
+
                                     <div className="mb-3.5 flex items-center justify-between">
                                         <span className="text-[12px] font-bold uppercase tracking-[0.07em] text-[#A39CAC]">
                                             추천 곡 · {tracks.length}곡
                                         </span>
                                     </div>
 
-                                    {/* 트랙 목록 */}
+
                                     <div className="flex flex-col gap-2.5">
                                         {tracks.map((track, index) => (
                                             <TrackCard
@@ -1030,7 +963,7 @@ export default function RecommendationPage() {
                                         ))}
                                     </div>
 
-                                    {/* 하단 액션 바 — Warm Linen 배경으로 톤 변화를 줘서 "여기서 끝난다"는 마무리감 부여 */}
+
                                     <div
                                         className={`mt-7 flex flex-wrap items-center justify-between gap-3 ${RADIUS.md} border border-[#E5DFD3] bg-[#F1ECE3] ${isMobile ? 'px-[18px] py-4' : 'px-6 py-[18px]'}`}
                                     >
@@ -1060,7 +993,7 @@ export default function RecommendationPage() {
                                     </div>
                                 </div>
 
-                                {/* ── 우: 감정 · 분위기 · 입력 내용 · 곡별 추천 이유 패널 (sticky) ── */}
+
                                 <div className={isNarrow ? 'order-1' : 'order-2'}>
                                     <SidePanel
                                         moodLabel={moodLabel}

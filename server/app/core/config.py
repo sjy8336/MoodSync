@@ -30,11 +30,10 @@ class Settings:
         self.openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
         self.gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
         self.gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
-        # Recommendation copy is a short structured-response task. Keep it on
-        # a low-latency model instead of competing with heavier reasoning work.
         self.gemini_copy_model: str = os.getenv("GEMINI_COPY_MODEL", "gemini-3.5-flash-lite")
         self.gemini_base_url: str = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
         self.gemini_embedding_model: str = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
+        self.cookie_secure: bool = self.environment.lower() not in {"development", "test"}
         frontend_origin = self.frontend_url
         alternate_frontend_origin = frontend_origin.replace("127.0.0.1", "localhost")
         alternate_localhost_origin = frontend_origin.replace("localhost", "127.0.0.1")

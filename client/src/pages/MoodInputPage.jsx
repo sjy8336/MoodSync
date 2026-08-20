@@ -84,32 +84,15 @@ const I = {
     activity: 'M22 12h-4l-3 9L9 3l-3 9H2',
 };
 
-/* ───────────────────────────────────────────
-   공통 접근성 유틸 클래스
-   커스텀 토글 버튼들에 키보드 포커스 링이 없어서 추가.
-─────────────────────────────────────────── */
+
 const FOCUS_RING =
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#7B7FF0] focus-visible:ring-offset-2 focus-visible:ring-offset-white';
-
-// 초기화/취소 버튼 — 둘이 같은 자리를 교대로 차지하므로 너비·높이를 고정해 전환 시 크기가 흔들리지 않게 함.
-// 너비는 "초기화"(더 긴 라벨) 기준으로 고정.
 const SECONDARY_BTN =
     'flex w-[104px] h-[52px] flex-shrink-0 items-center justify-center gap-1.5 rounded-[16px] text-[13.5px] font-bold text-[#6E6678] bg-white border-[1.5px] border-[#E5DFD3] hover:border-[#D6CFC1] hover:text-[#211C26] transition-all duration-150 cursor-pointer';
 
 const MAX_VIBES = 4;
 
-/*
-  ── 감정 컬러 테마
-  RecommendationPage의 MOOD_MAP과 동일한 3가지 감정군(Coral·Amber·Lavender)을 그대로 사용해
-  입력 단계에서 고른 색이 결과 페이지에서도 이어지도록 맞춤. (이전엔 이 페이지만 모든 감정이
-  하나의 Lavender solid 배경 + 어두운 텍스트라, 선택 시 대비가 낮아 보이고 결과 페이지와도
-  색이 이어지지 않았음.)
 
-  선택된 상태는 solid 채우기 대신 "soft 배경 + 진한 잉크 텍스트" 조합을 사용해서
-  대비를 넉넉하게(WCAG AA 이상) 확보하면서도 최근 UI 트렌드인 은은한 톤온톤 배지 스타일을 따름.
-  accent/soft는 다른 페이지와 동일한 원색을 재사용하고, ink만 이 페이지에 새로 추가한
-  "가독성 확보용 진한 변형"이다.
-*/
 const MOOD_THEME = {
     coral: { accent: '#FF6B5E', ink: '#B23324', soft: '#FFEAE6', border: '#FFC9C2' },
     amber: { accent: '#FFB648', ink: '#8A5A0E', soft: '#FFF3DE', border: '#FFDCA0' },
@@ -148,10 +131,6 @@ export default function MoodInputPage() {
     const [error, setError] = useState('');
     const [isMobile, setIsMobile] = useState(false);
     const navigate = useNavigate();
-
-    // 진행 중인 요청을 취소하기 위한 ref.
-    // apiClient의 recommendMood가 AbortSignal을 지원하지 않는 경우에도,
-    // requestIdRef로 "이 응답은 이미 취소된 요청의 응답"임을 판별해 네비게이션/에러 표시를 막는다.
     const abortControllerRef = useRef(null);
     const requestIdRef = useRef(0);
     const errorRef = useRef(null);
@@ -162,17 +141,11 @@ export default function MoodInputPage() {
         window.addEventListener('resize', check);
         return () => window.removeEventListener('resize', check);
     }, []);
-
-    // 언마운트 시 진행 중인 요청 정리
     useEffect(() => {
         return () => {
             abortControllerRef.current?.abort();
         };
     }, []);
-
-    // 에러가 뜨면 자동으로 스크롤해서 보여줌.
-    // 모바일에서는 하단 sticky CTA로 제출하는 경우가 많아, 에러가 화면 중간(Step3 카드)에
-    // 렌더링되면 사용자가 놓치기 쉬움 → 발생 시점에 시야로 끌어옴.
     useEffect(() => {
         if (error && errorRef.current) {
             errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -210,10 +183,6 @@ export default function MoodInputPage() {
             const vibeText = vibes.length > 0 ? ` 원하는 분위기: ${vibes.join(', ')}.` : '';
             const combined = (text.trim() + vibeText).trim();
             const payload = { ...(combined && { text: combined }), ...(mood && { mood }) };
-
-            // apiClient가 두 번째 인자로 { signal }을 지원하지 않는다면 이 옵션은 무시되고
-            // 네트워크 요청 자체는 계속 진행되지만, 아래 requestId 체크로 취소 이후의
-            // 응답이 화면에 반영(네비게이션/에러 표시)되는 것은 막는다.
             const result = await recommendMood(payload, { signal: controller.signal });
 
             if (requestIdRef.current !== requestId) return; // 이미 취소된 요청
@@ -239,8 +208,6 @@ export default function MoodInputPage() {
 
     const canSubmit = !!mood && !loading;
     const selectedMood = MOOD_OPTIONS.find((m) => m.value === mood);
-    // 선택된 감정의 색을 Step2·Step3 전반의 액센트로 사용 — 결과 페이지로 이어지는 시각적 연속성.
-    // 아직 감정을 고르지 않았을 때는 브랜드 기본색(Lavender)을 사용한다.
     const activeTheme = selectedMood ? MOOD_THEME[selectedMood.family] : MOOD_THEME.lavender;
     const step2Active = mood && !loading;
     const step2Done = (text.trim() || vibes.length > 0) && mood;
@@ -249,7 +216,7 @@ export default function MoodInputPage() {
     return (
         <>
             <div className="ms-page-shell">
-                {/* ── 배경 orbs ── */}
+
                 <div aria-hidden="true" className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
                     <div
                         className="absolute -right-[8%] -top-[10%] h-[360px] w-[360px] rounded-full [animation:orb1_12s_ease-in-out_infinite] transition-[background] duration-500"
@@ -267,12 +234,12 @@ export default function MoodInputPage() {
 
                 <Header />
 
-                {/* ── MAIN ── */}
+
                 <main
                     className={`ms-page-main ${isMobile ? 'ms-page-main-mobile' : 'ms-page-main-desktop'} ${isMobile ? 'pb-24' : ''}`}
                 >
                     <form onSubmit={handleSubmit} noValidate className="w-full">
-                        {/* 헤더 */}
+
                         <div className="text-center mb-11 opacity-0 [animation:ms-fadeUp_0.6s_ease_forwards] [animation-delay:0.05s]">
                             <span className="inline-flex items-center gap-1.5 text-[11px] font-bold tracking-[0.07em] uppercase bg-[#F1ECE3] text-[#211C26] px-3.5 py-1.5 rounded-full mb-5">
                                 <Ic d={I.sparkles} size={12} color="#7B7FF0" sw={1.6} /> 감정 기반 음악 추천
@@ -286,7 +253,7 @@ export default function MoodInputPage() {
                         </div>
 
                         <div className="flex flex-col gap-4">
-                            {/* ══ STEP 1 · 감정 선택 ══ */}
+
                             <div className="opacity-0 [animation:ms-fadeUp_0.6s_ease_forwards] [animation-delay:0.1s] bg-white rounded-3xl border border-[#E5DFD3] overflow-hidden shadow-[0_4px_24px_-8px_rgba(33,28,38,0.07)]">
                                 <div className="px-6 pt-5 pb-4 border-b border-[#F1ECE3] flex items-center justify-between">
                                     <div className="flex items-center gap-2.5">
@@ -307,7 +274,7 @@ export default function MoodInputPage() {
                                     </span>
                                 </div>
 
-                                {/* 감정 pill 그리드 — soft 배경 + 진한 잉크 텍스트로 선택 시에도 대비를 확보 */}
+
                                 <div className="px-6 py-5 flex flex-wrap gap-2">
                                     {MOOD_OPTIONS.map((m) => {
                                         const active = mood === m.value;
@@ -347,7 +314,7 @@ export default function MoodInputPage() {
                                 </div>
                             </div>
 
-                            {/* ══ STEP 2 · 텍스트 + 분위기 ══ */}
+
                             <div
                                 className={`opacity-0 [animation:ms-fadeUp_0.6s_ease_forwards] [animation-delay:0.16s] bg-white rounded-3xl border border-[#E5DFD3] overflow-hidden shadow-[0_4px_24px_-8px_rgba(33,28,38,0.07)] transition-opacity duration-300 ${
                                     step2Active ? 'opacity-100' : 'opacity-45'
@@ -373,7 +340,7 @@ export default function MoodInputPage() {
                                 </div>
 
                                 <div className="px-6 py-5 flex flex-col gap-5">
-                                    {/* 텍스트 입력 */}
+
                                     <div>
                                         <label
                                             htmlFor="mood-free-text"
@@ -408,7 +375,7 @@ export default function MoodInputPage() {
                                         </p>
                                     </div>
 
-                                    {/* 분위기 선택 — 선택된 감정의 색을 그대로 이어받아 사용 */}
+
                                     <div>
                                         <div className="flex items-center justify-between mb-2.5">
                                             <p className="text-[12.5px] font-semibold text-[#6E6678]">원하는 분위기</p>
@@ -467,7 +434,7 @@ export default function MoodInputPage() {
                                 </div>
                             </div>
 
-                            {/* ══ STEP 3 · 추천받기 ══ */}
+
                             <div
                                 style={
                                     mood
@@ -495,7 +462,7 @@ export default function MoodInputPage() {
                                 </div>
 
                                 <div className="p-6">
-                                    {/* 선택 요약 — 각 태그에서 바로 선택 취소 가능 (X 버튼) */}
+
                                     {(mood || vibes.length > 0) && (
                                         <div className="flex flex-wrap gap-[7px] mb-[18px]">
                                             {selectedMood && (
@@ -552,10 +519,7 @@ export default function MoodInputPage() {
                                         </div>
                                     )}
 
-                                    {/* 제출 버튼 + 보조 버튼(초기화/취소)
-                                        평소: [초기화] [음악 추천받기]
-                                        로딩 중: [음악을 찾고 있어요] [취소]
-                                        — 두 보조 액션을 항상 같은 자리(주 버튼 옆)에 둬서 위치가 안 흔들리게 함 */}
+
                                     <div className="flex items-center gap-2.5">
                                         <button
                                             type="submit"
@@ -574,7 +538,7 @@ export default function MoodInputPage() {
                                         >
                                             {loading ? (
                                                 <>
-                                                    {/* SVG 원형 스피너 */}
+
                                                     <svg
                                                         width="20"
                                                         height="20"
@@ -663,9 +627,7 @@ export default function MoodInputPage() {
                     </form>
                 </main>
 
-                {/* ── 모바일 sticky 하단 CTA ──
-                    폼이 길어서 모바일에서는 제출 버튼까지 스크롤을 왕복해야 했던 부분을 보완.
-                    Step3의 버튼과 별개 엘리먼트지만 같은 submitMood/handleCancel을 그대로 사용. */}
+
                 {isMobile && (
                     <div className="fixed bottom-0 left-0 right-0 z-20 px-4 py-3 bg-white/95 backdrop-blur border-t border-[#E5DFD3] flex items-center gap-2.5">
                         <button

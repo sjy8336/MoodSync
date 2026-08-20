@@ -64,6 +64,14 @@ mood-sync/
 4. 프론트엔드 실행
     - `cd ../client && npm run dev`
 
+## 배포 체크
+
+- `ENVIRONMENT=production`으로 설정하면 로그인 쿠키가 안전한 전송 조건에 맞춰집니다.
+- `FRONTEND_URL`에는 실제 배포된 프론트엔드 주소를 넣어 주세요.
+- `VITE_API_BASE_URL`은 프론트와 백엔드를 분리 배포할 때 백엔드 공개 주소를 가리켜야 합니다.
+- `DATABASE_URL`, `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`, `OPENAI_API_KEY`, `GEMINI_API_KEY` 같은 비밀값은 배포 환경 변수로 주입하세요.
+- 프론트와 백엔드의 도메인이 달라지면 CORS 허용 목록도 `FRONTEND_URL` 기준으로 맞아야 합니다.
+
 ## 컬러팔레트
 
 | 역할                           | 색상명        | Hex     |

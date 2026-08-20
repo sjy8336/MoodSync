@@ -1,5 +1,7 @@
-const API_BASE_URL =
-    import.meta.env.VITE_API_BASE_URL || `${window.location.protocol}//${window.location.hostname}:8000`;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL
+    || ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? `${window.location.protocol}//${window.location.hostname}:8000`
+        : window.location.origin);
 
 const ENDPOINTS = {
     health: '/api/health',
@@ -46,7 +48,7 @@ async function request(path, options = {}) {
             detail = errorBody.detail || detail;
             code = errorBody.code || code;
         } catch {
-            // Keep default error details when body is not JSON.
+            void 0;
         }
         const error = new Error(detail);
         error.status = response.status;
