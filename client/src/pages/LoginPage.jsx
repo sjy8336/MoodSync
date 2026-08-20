@@ -80,10 +80,10 @@ const DEMO_PRESETS = [
         delayClass: '[animation-delay:0.48s]',
     },
     {
-        id: 'travel',
-        label: '여행 테스트',
-        description: '여행길, 도로 위, 풍경이 바뀌는 순간에 어울리는 곡을 살펴봐요.',
-        badge: '여행 / 로드트립',
+        id: 'dreamy',
+        label: '몽환 테스트',
+        description: '드림 팝, 신스, 공간감 있는 사운드의 분위기를 확인해요.',
+        badge: '몽환 / 드림 팝',
         delayClass: '[animation-delay:0.51s]',
     },
 ];

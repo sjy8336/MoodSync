@@ -34,6 +34,8 @@ class Settings:
         self.gemini_base_url: str = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
         self.gemini_embedding_model: str = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-2")
         self.cookie_secure: bool = self.environment.lower() not in {"development", "test"}
+        # Render may host the frontend and API on different HTTPS origins.
+        self.cookie_samesite: str = "none" if self.cookie_secure else "lax"
         frontend_origin = self.frontend_url
         alternate_frontend_origin = frontend_origin.replace("127.0.0.1", "localhost")
         alternate_localhost_origin = frontend_origin.replace("localhost", "127.0.0.1")
