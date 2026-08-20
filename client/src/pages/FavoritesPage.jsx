@@ -418,8 +418,8 @@ export default function FavoritesPage() {
     const demoPresetLabel = {
         focus: '집중 테스트',
         jazz: '재즈 테스트',
-        calm: '밤공기 테스트',
-        emotional: '감성 테스트',
+        drive: '드라이브 테스트',
+        travel: '여행 테스트',
     }[demoPresetKey] || '데모';
 
 

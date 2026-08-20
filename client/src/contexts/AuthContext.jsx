@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { getCurrentUser } from '../services/apiClient';
+import { getCurrentUser, getDemoSession } from '../services/apiClient';
 import { clearStoredAuthUser, getStoredAuthUser, normalizeAuthUser, setStoredAuthUser } from '../utils/authStorage';
 
 const defaultAuthValue = {
@@ -20,7 +20,10 @@ export function AuthProvider({ children }) {
         const cachedUser = getStoredAuthUser();
         if (cachedUser) {
             setUser(normalizeAuthUser(cachedUser));
-            getCurrentUser()
+            const refreshSession = cachedUser.auth_provider === 'demo'
+                ? getDemoSession
+                : getCurrentUser;
+            refreshSession()
                 .then((data) => {
                     if (data?.user) {
                         const nextUser = normalizeAuthUser(data.user);
