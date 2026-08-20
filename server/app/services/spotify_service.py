@@ -397,6 +397,22 @@ def _build_reason_facts(name: str, artist_name: str, seed_genres: list[str] | No
     return facts
 
 
+def _focus_feature_role_compatibility(tags: set[str], moods: set[str]) -> float:
+    """Estimate long-session focus compatibility from verified catalog facts."""
+    score = 0.5
+    if tags & {"calm", "soft", "ambient", "relaxed"} or "calm" in moods:
+        score += 0.18
+    if "instrumental" in tags:
+        score += 0.12
+    if tags & {"groove", "rhythmic_light", "bossa-nova"}:
+        score += 0.06
+    if tags & {"prominent_vocal", "high_energy", "driving", "aggressive", "busy", "dense"}:
+        score -= 0.2
+    if tags & {"fast", "rhythmic_strong", "bebop", "hard-bop", "fusion", "swing", "big-band", "dynamic_build"}:
+        score -= 0.18
+    return max(0.0, min(1.0, round(score, 2)))
+
+
 def _build_contextual_reason_facts(name: str, artist_name: str, context_text: str | None) -> dict[str, object]:
     facts = _build_reason_facts(name, artist_name)
     if _is_sleep_request(context_text):
@@ -425,12 +441,21 @@ def _build_contextual_reason_facts(name: str, artist_name: str, context_text: st
     if _is_long_focus_request(context_text):
         tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
         moods = {str(mood).lower() for mood in facts.get("moods", []) if mood}
-        facts["low_stimulation_fit"] = bool(tags & {"calm", "soft", "ambient", "relaxed"} or "calm" in moods)
+        facts["feature_role_compatibility"] = _focus_feature_role_compatibility(tags, moods)
+        facts["low_stimulation_fit"] = bool(
+            tags & {"calm", "soft", "ambient", "relaxed"} or "calm" in moods
+        ) and not bool(tags & {"prominent_vocal", "high_energy", "busy", "dense", "rhythmic_strong"})
         facts["sustained_focus_fit"] = bool(tags & {"focused", "calm", "soft", "ambient", "instrumental"} or moods & {"focused", "calm"})
+        facts["long_session_fit"] = facts["sustained_focus_fit"] and facts["feature_role_compatibility"] >= 0.5
+        facts["mellow_fit"] = bool(tags & {"calm", "soft", "ambient", "relaxed", "dreamy"} or "calm" in moods)
         facts["calm_fit"] = bool("calm" in tags or "calm" in moods)
         facts["relaxed_flow_fit"] = bool(tags & {"relaxed", "calm", "soft", "ambient"})
         facts["light_rhythm_fit"] = bool(tags & {"groove", "rhythmic", "rhythmic_light", "bossa-nova"})
-        facts["distraction_risk"] = "high" if tags & {"high_energy", "driving", "busy", "dense", "prominent_vocal"} else "low" if facts["low_stimulation_fit"] else "unknown"
+        facts["distraction_risk"] = (
+            "high"
+            if tags & {"high_energy", "driving", "busy", "dense", "prominent_vocal", "rhythmic_strong", "bebop", "fast"}
+            else "low" if facts["low_stimulation_fit"] else "unknown"
+        )
         facts["focus_ranking_factors"] = [
             key for key, present in (
                 ("low_stimulation", facts["low_stimulation_fit"]),
@@ -560,15 +585,15 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "So What", "artist_name": "Miles Davis", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Blue in Green", "artist_name": "Miles Davis", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Autumn Leaves", "artist_name": "Chet Baker", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "vocal-jazz", "standard"]},
-    {"name": "My Favorite Things", "artist_name": "John Coltrane", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "My Favorite Things", "artist_name": "John Coltrane", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed", "rhythmic_strong"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Round Midnight", "artist_name": "Thelonious Monk", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Sing, Sing, Sing", "artist_name": "Benny Goodman", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "swing", "big-band", "instrumental"]},
     {"name": "Take the A Train", "artist_name": "Duke Ellington", "moods": ["happy", "focused", "calm"], "tags": ["jazz", "swing", "standard", "big-band"]},
     {"name": "It Don't Mean a Thing", "artist_name": "Duke Ellington", "moods": ["happy", "excited", "focused"], "tags": ["jazz", "swing", "standard", "big-band"]},
-    {"name": "Donna Lee", "artist_name": "Charlie Parker", "moods": ["focused", "excited", "angry"], "tags": ["jazz", "bebop", "instrumental"]},
+    {"name": "Donna Lee", "artist_name": "Charlie Parker", "moods": ["focused", "excited", "angry"], "tags": ["jazz", "bebop", "instrumental", "rhythmic_strong", "busy"]},
     {"name": "Moanin'", "artist_name": "Art Blakey & The Jazz Messengers", "moods": ["focused", "calm"], "tags": ["jazz", "hard-bop", "instrumental", "piano", "saxophone", "rhythmic_strong"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Blue Bossa", "artist_name": "Joe Henderson", "moods": ["calm", "focused", "sad"], "tags": ["jazz", "bossa-nova", "latin", "instrumental", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
-    {"name": "The Girl from Ipanema", "artist_name": "Stan Getz & João Gilberto", "moods": ["calm", "happy", "focused"], "tags": ["bossa-nova", "latin", "acoustic", "vocal-jazz"]},
+    {"name": "The Girl from Ipanema", "artist_name": "Stan Getz & João Gilberto", "moods": ["calm", "happy", "focused"], "tags": ["bossa-nova", "latin", "acoustic", "vocal-jazz", "prominent_vocal"]},
     {"name": "Birdland", "artist_name": "Weather Report", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "fusion", "instrumental"]},
     {"name": "Spain", "artist_name": "Chick Corea", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "fusion", "instrumental"]},
     {"name": "Cantaloupe Island", "artist_name": "Herbie Hancock", "moods": ["focused", "happy", "calm"], "tags": ["jazz", "fusion", "instrumental"]},
@@ -603,8 +628,8 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "Pretender", "artist_name": "Official HIGE DANDism", "moods": ["sad", "lonely", "calm"], "tags": ["jpop", "ballad", "emotional"], "reason": "제이팝 발라드의 감정선을 부드럽게 담아내는 곡이에요."},
     {"name": "Lemon", "artist_name": "Kenshi Yonezu", "moods": ["sad", "lonely"], "tags": ["jpop", "ballad", "emotional"], "reason": "제이팝의 대표적인 감성 곡으로, 서늘한 여운이 좋아요."},
     {"name": "Blue Bird", "artist_name": "Ikimonogakari", "moods": ["happy", "excited"], "tags": ["jpop", "anime", "upbeat"], "reason": "애니 오프닝처럼 시원하게 뻗는 느낌이 필요할 때 잘 맞아요."},
-    {"name": "Brave Shine", "artist_name": "Aimer", "moods": ["sad", "focused", "calm"], "tags": ["jpop", "anime", "emotional"], "reason": "애니 OST의 드라마틱한 결을 부드럽게 담아내는 곡이에요."},
-    {"name": "Into The Night", "artist_name": "YOASOBI", "moods": ["calm", "focused"], "tags": ["jpop", "emotional", "dreamy"], "reason": "제이팝의 선명한 보컬 중심 흐름을 느끼기 좋아요."},
+    {"name": "Brave Shine", "artist_name": "Aimer", "moods": ["sad", "focused", "calm"], "tags": ["jpop", "anime", "emotional", "prominent_vocal"], "reason": "애니 OST의 드라마틱한 결을 부드럽게 담아내는 곡이에요."},
+    {"name": "Into The Night", "artist_name": "YOASOBI", "moods": ["calm", "focused"], "tags": ["jpop", "emotional", "dreamy", "prominent_vocal"], "reason": "제이팝의 선명한 보컬 중심 흐름을 느끼기 좋아요."},
     {"name": "American Idiot", "artist_name": "Green Day", "moods": ["angry", "anxious", "focused"], "tags": ["punk", "rock", "high_energy"], "reason": "에너지를 확 끌어올리고 싶을 때 가장 직선적으로 붙는 펑크락이에요."},
     {"name": "Basket Case", "artist_name": "Green Day", "moods": ["angry", "anxious", "focused"], "tags": ["punk", "rock", "high_energy"], "reason": "울적한 감정을 너무 무겁지 않게 날려버리는 속도가 좋아요."},
     {"name": "Misery Business", "artist_name": "Paramore", "moods": ["angry", "anxious", "excited"], "tags": ["punk", "rock", "high_energy"], "reason": "시원하게 달리는 기타와 보컬이 기분 전환용으로 잘 맞아요."},
@@ -831,6 +856,7 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             "display_title": track.display_title or track.name,
             "artist": track.artist_name,
             "album": track.album_name,
+            "spotify_track_name": track.spotify_track_name,
             "spotify_track_id": track.track_id if not track.track_id.startswith("fallback-") else None,
             "canonical_recording_identity": track.canonical_recording_identity or facts.get("canonical_recording_identity"),
             "recording_match_confidence": track.recording_match_confidence,
@@ -838,9 +864,20 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             "piano": "piano" in set(facts.get("recording_instruments") or []),
             "saxophone": "saxophone" in set(facts.get("recording_instruments") or []),
             "instrumentation_source": track.instrumentation_source or facts.get("instrumentation_verification") or "unknown",
+            "actual_track_features": {
+                "tags": facts.get("tags", []),
+                "moods": facts.get("moods", []),
+                "feature_provenance": facts.get("feature_provenance", {}),
+            },
             "low_stimulation_fit": facts.get("low_stimulation_fit"),
             "relaxed_flow_fit": facts.get("relaxed_flow_fit"),
             "calm_fit": facts.get("calm_fit"),
+            "mellow_fit": facts.get("mellow_fit"),
+            "light_rhythm_fit": facts.get("light_rhythm_fit"),
+            "long_session_fit": facts.get("long_session_fit"),
+            "sustained_focus_fit": facts.get("sustained_focus_fit"),
+            "distraction_risk": facts.get("distraction_risk"),
+            "feature_role_compatibility": facts.get("feature_role_compatibility"),
             "final_ranking_score": facts.get("final_ranking_score"),
         })
     return {
@@ -850,6 +887,7 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         "current_request_explicit_genre": current_genre,
         "genre_state_reset": True,
         "previous_candidate_pool_reused": False,
+        "focus_request_feature_reset": True,
         "current_retrieval_query": (
             explicit_genres[:5] if explicit_genres else ["genre_neutral_focus_catalog"]
         ),
@@ -2183,20 +2221,22 @@ def _score_fallback_candidate(
     if long_focus_request:
         # Prefer a steady, low-stimulation palette for long listening sessions.
         # Rhythm is a light variation, not a reason to promote high energy.
+        focus_compatibility = _focus_feature_role_compatibility(candidate_tags, candidate_moods)
+        score += round((focus_compatibility - 0.5) * 48)
         if "focused" in candidate_moods or "focused" in candidate_tags:
             score += 14
         if "calm" in candidate_moods or "calm" in candidate_tags:
             score += 12
         if candidate_tags & {"soft", "ambient", "instrumental", "groove", "rhythmic"}:
             score += 6
-        if candidate_tags & {"high_energy", "driving", "aggressive", "busy"}:
+        if candidate_tags & {"high_energy", "driving", "aggressive", "busy", "dense", "prominent_vocal"}:
             score -= 24
         if "upbeat" in candidate_tags:
             score -= 8
         if not explicit_genre_set:
             if candidate_tags & {"soft", "ambient", "dreamy", "groove", "instrumental"}:
                 score += 8
-            if candidate_tags & {"hard-bop", "fusion", "swing", "big-band", "rhythmic_strong"}:
+            if candidate_tags & {"hard-bop", "fusion", "swing", "big-band", "rhythmic_strong", "bebop", "fast"}:
                 score -= 16
     if calm_jazz_instrument_request:
         if "jazz" in candidate_tags:

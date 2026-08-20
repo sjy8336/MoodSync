@@ -401,6 +401,8 @@ def _is_feature_role_compatible(track: TrackSummary, mood: str, input_text: str,
         return False
     if focus == "낮은 자극으로 배경 유지" and facts.get("distraction_risk") == "high":
         return False
+    if facts.get("feature_role_compatibility") is not None and float(facts["feature_role_compatibility"]) < 0.4:
+        return False
     return True
 
 
@@ -681,6 +683,19 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
         for track in tracks
         if (track.reason_facts or {}).get("selection_category")
     ]
+    track_facts = [track.reason_facts or {} for track in tracks]
+    focus_coverage = {
+        "low_stimulation_coverage": sum(bool(facts.get("low_stimulation_fit")) for facts in track_facts),
+        "calm_coverage": sum(bool(facts.get("calm_fit")) for facts in track_facts),
+        "mellow_coverage": sum(bool(facts.get("mellow_fit")) for facts in track_facts),
+        "light_rhythm_coverage": sum(bool(facts.get("light_rhythm_fit")) for facts in track_facts),
+        "high_distraction_count": sum(facts.get("distraction_risk") == "high" for facts in track_facts),
+        "prominent_vocal_count": sum("prominent_vocal" in set(facts.get("tags", [])) for facts in track_facts),
+        "high_intensity_count": sum(
+            bool(set(facts.get("tags", [])) & {"high_energy", "aggressive", "fast", "rhythmic_strong"})
+            for facts in track_facts
+        ),
+    }
     return {
         "access_token": access_token,
         "tracks": tracks,
@@ -695,6 +710,7 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
             "recent_overlap_count": recent_overlap_count,
             "diversity_candidate_pool_multiplier": 3,
             "selected_categories": selected_categories,
+            "focus_coverage": focus_coverage,
             "retrieved_candidate_count": retrieved_candidate_count,
             "ranked_candidate_count": ranked_candidate_count,
             "selected_tracks_before_validation_count": selected_count_before_validation,

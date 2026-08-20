@@ -90,6 +90,20 @@ class GeminiRecommendationCopyTests(unittest.TestCase):
         self.assertNotIn("Feel It Still", {str(item["name"]) for item in catalog})
         self.assertNotIn("sleepless in ______", {str(item["name"]) for item in catalog})
 
+    def test_long_focus_demotes_busy_bebop_and_prominent_vocal_tracks(self) -> None:
+        text = (
+            "오늘은 노트북 앞에서 오래 앉아 있을 예정이라, 너무 산만하지 않고 "
+            "몰입이 이어지는 음악이 필요해요. 잔잔하지만 리듬감은 조금 있었으면 좋겠어요."
+        )
+        catalog = _select_fallback_catalog("focused", text, 6)
+        by_name = {str(item["name"]): item for item in catalog}
+
+        self.assertNotIn("Donna Lee", by_name)
+        if "Brave Shine" in by_name:
+            self.assertLess(float(by_name["Brave Shine"].get("final_ranking_score", 0)), 20)
+        if "Into The Night" in by_name:
+            self.assertLess(float(by_name["Into The Night"].get("final_ranking_score", 0)), 20)
+
     def test_explicit_jazz_and_instrument_request_controls_fallback_catalog(self) -> None:
         text = (
             "오늘은 조금 지쳐서 재즈를 듣고 싶어요. 너무 자극적이지 않고, "
