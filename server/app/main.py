@@ -1,7 +1,10 @@
 import logging
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 
@@ -11,6 +14,8 @@ from app.db.init_db import init_db
 from app.db.session import engine
 
 logger = logging.getLogger(__name__)
+BASE_DIR = Path(__file__).resolve().parents[1]
+STATIC_DIR = BASE_DIR / "static"
 
 app = FastAPI(title="Mood Sync API", version="1.0.0")
 app.add_middleware(
@@ -21,6 +26,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(api_router, prefix="/api/v1")
+
+if STATIC_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
+
+@app.get("/")
+def serve_frontend_root() -> FileResponse:
+    index_path = STATIC_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Frontend build output is missing.")
+    return FileResponse(index_path)
 
 
 @app.on_event("startup")
@@ -47,3 +63,14 @@ def ensure_database_columns() -> None:
 @app.get("/api/health")
 def health_check() -> dict[str, bool | str]:
     return {"ok": True, "message": "Mood Sync FastAPI server is running."}
+
+
+@app.get("/{full_path:path}")
+def serve_frontend_spa(full_path: str) -> FileResponse:
+    if full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail="API route not found.")
+
+    index_path = STATIC_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="Frontend build output is missing.")
+    return FileResponse(index_path)

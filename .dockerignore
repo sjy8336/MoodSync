@@ -1,0 +1,13 @@
+client/node_modules
+client/dist
+server/__pycache__
+server/.pytest_cache
+server/.mypy_cache
+server/.ruff_cache
+server/.venv
+server/venv
+server/env
+.git
+.gitignore
+.DS_Store
+*.log

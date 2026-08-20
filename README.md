@@ -66,6 +66,9 @@ mood-sync/
 
 ## 배포 체크
 
+- Docker 배포를 쓸 경우 루트의 `Dockerfile`이 프론트 빌드와 FastAPI 실행을 함께 처리합니다.
+- Docker 방식에서는 Render의 Start Command를 따로 넣지 않아도 되고, `Dockerfile`의 `CMD`가 사용됩니다.
+- 이 프로젝트의 Docker 실행 커맨드는 `uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}` 입니다.
 - `ENVIRONMENT=production`으로 설정하면 로그인 쿠키가 안전한 전송 조건에 맞춰집니다.
 - `FRONTEND_URL`에는 실제 배포된 프론트엔드 주소를 넣어 주세요.
 - `VITE_API_BASE_URL`은 프론트와 백엔드를 분리 배포할 때 백엔드 공개 주소를 가리켜야 합니다.
