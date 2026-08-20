@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import Footer from '../components/Footer';
 import Header from '../components/Header';
 
@@ -419,17 +420,17 @@ const TrackCard = ({ cover, title, artist, reason, spotifyUrl, index }) => {
 };
 
 
-const BtnPrimary = ({ href, children, className = '' }) => {
+const BtnPrimary = ({ to, children, className = '' }) => {
     const [hov, setHov] = useState(false);
     return (
-        <a
-            href={href}
+        <Link
+            to={to}
             onMouseEnter={() => setHov(true)}
             onMouseLeave={() => setHov(false)}
             className={`inline-flex items-center gap-[9px] rounded-full bg-[#211C26] px-7 py-4 text-[15.5px] font-bold text-white no-underline transition-all duration-200 ${hov ? '-translate-y-0.5 shadow-[0_20px_48px_-16px_rgba(33,28,38,0.4)]' : ''} ${className}`}
         >
             {children}
-        </a>
+        </Link>
     );
 };
 
@@ -491,7 +492,7 @@ export default function MoodSync() {
                         </p>
 
                         <div className={`fu mb-5 flex ${isMobile ? 'w-full flex-col' : 'flex-row'} items-stretch justify-center gap-3 [animation-delay:0.35s]`}>
-                            <BtnPrimary href="#connect" className={isMobile ? 'w-full justify-center' : 'justify-center'}>
+                            <BtnPrimary to="/login" className={isMobile ? 'w-full justify-center' : 'justify-center'}>
                                 <Ic d={I.music} size={18} color="#fff" /> Spotify로 시작하기
                             </BtnPrimary>
                             <BtnGhost href="#concept" fullWidth={isMobile}>
@@ -705,9 +706,9 @@ export default function MoodSync() {
                             Mood Sync는 Spotify의 음악 데이터를 활용해서 추천해요. 계정을 연결하면 추천받은 곡을 끊김
                             없이 Spotify에서 바로 재생할 수 있어요.
                         </p>
-                        <a href="#" className={`inline-flex items-center justify-center gap-2.5 rounded-full bg-[#1ED760] px-[26px] py-4 text-[15.5px] font-extrabold text-[#191414] no-underline transition-transform duration-200 hover:-translate-y-0.5 hover:brightness-105 ${isMobile ? 'w-full' : 'w-auto'}`}>
+                        <Link to="/login" className={`inline-flex items-center justify-center gap-2.5 rounded-full bg-[#1ED760] px-[26px] py-4 text-[15.5px] font-extrabold text-[#191414] no-underline transition-transform duration-200 hover:-translate-y-0.5 hover:brightness-105 ${isMobile ? 'w-full' : 'w-auto'}`}>
                             <Ic d={I.music} size={19} color={T.spotBlack} /> Spotify로 계속하기
-                        </a>
+                        </Link>
 
                         <div className="mt-[22px] flex max-w-[460px] items-start gap-2.5">
                             <Ic d={I.shield} size={15} color="rgba(250,248,244,0.45)" className="mt-px shrink-0" />
@@ -780,7 +781,7 @@ export default function MoodSync() {
                         <p className="mb-8 text-[16px] text-[#6E6678]">
                             감정 하나 고르는 데 걸리는 시간은 5초예요.
                         </p>
-                        <BtnPrimary href="#connect">
+                        <BtnPrimary to="/login">
                             <Ic d={I.music} size={18} color="#fff" /> 무료로 시작하기
                         </BtnPrimary>
                     </div>

@@ -360,6 +360,272 @@ const buildRecentTrackItems = (recommendation) => {
 };
 
 
+const DEMO_HOME_SNAPSHOTS = {
+    focus: {
+        todayMood: {
+            label: '집중',
+            icon: I.target,
+            color: '#FFB648',
+            soft: '#FFF3DE',
+            time: '오전 10:12',
+            analysis: [
+                { label: '집중력', pct: 84, color: '#FFB648' },
+                { label: '편안함', pct: 58, color: '#7B7FF0' },
+                { label: '몰입', pct: 76, color: '#FF6B5E' },
+            ],
+            track: {
+                cover: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&q=80',
+                title: 'Take Five',
+                artist: 'The Dave Brubeck Quartet',
+            },
+        },
+        recentMoods: [
+            { day: '오늘', label: '집중', icon: I.target, color: '#FFB648', soft: '#FFF3DE' },
+            { day: '어제', label: '평온', icon: I.cloud, color: '#7B7FF0', soft: '#ECEDFD' },
+            { day: '3일 전', label: '집중', icon: I.target, color: '#FFB648', soft: '#FFF3DE' },
+        ],
+        recentTracks: [
+            {
+                trackId: 'demo-focus-1',
+                cover: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&q=80',
+                title: 'Take Five',
+                artist: 'The Dave Brubeck Quartet',
+                mood: '집중',
+                moodKey: 'focused',
+                moodColor: '#FFB648',
+                albumName: 'Time Out',
+                durationMs: 324000,
+                reason: '집중을 깨지 않으면서도 리듬감을 살려줘요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+            {
+                trackId: 'demo-focus-2',
+                cover: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=200&q=80',
+                title: 'Blue in Green',
+                artist: 'Miles Davis',
+                mood: '집중',
+                moodKey: 'focused',
+                moodColor: '#FFB648',
+                albumName: 'Kind of Blue',
+                durationMs: 337000,
+                reason: '과하게 흔들지 않고 몰입을 이어가게 해줘요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+            {
+                trackId: 'demo-focus-3',
+                cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&q=80',
+                title: 'Cantaloupe Island',
+                artist: 'Herbie Hancock',
+                mood: '집중',
+                moodKey: 'focused',
+                moodColor: '#FFB648',
+                albumName: 'Empyrean Isles',
+                durationMs: 308000,
+                reason: '집중 상태를 유지하면서도 그루브를 조금 더해줘요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+        ],
+    },
+    jazz: {
+        todayMood: {
+            label: '재즈',
+            icon: I.music,
+            color: '#7B7FF0',
+            soft: '#ECEDFD',
+            time: '오후 2:18',
+            analysis: [
+                { label: '스윙', pct: 76, color: '#FFB648' },
+                { label: '여유', pct: 68, color: '#7B7FF0' },
+                { label: '활기', pct: 61, color: '#FF6B5E' },
+            ],
+            track: {
+                cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&q=80',
+                title: 'Blue Bossa',
+                artist: 'Joe Henderson',
+            },
+        },
+        recentMoods: [
+            { day: '오늘', label: '집중', icon: I.target, color: '#FFB648', soft: '#FFF3DE' },
+            { day: '어제', label: '설렘', icon: I.sparkle, color: '#FF6B5E', soft: '#FFEAE6' },
+            { day: '3일 전', label: '평온', icon: I.cloud, color: '#7B7FF0', soft: '#ECEDFD' },
+        ],
+        recentTracks: [
+            {
+                trackId: 'demo-jazz-1',
+                cover: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&q=80',
+                title: 'Sing, Sing, Sing',
+                artist: 'Benny Goodman',
+                mood: '재즈',
+                moodKey: 'jazz',
+                moodColor: '#7B7FF0',
+                albumName: 'The Essential Benny Goodman',
+                durationMs: 515000,
+                reason: '스윙의 활기와 큰 편성이 바로 느껴져요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+            {
+                trackId: 'demo-jazz-2',
+                cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&q=80',
+                title: 'Blue Bossa',
+                artist: 'Joe Henderson',
+                mood: '재즈',
+                moodKey: 'jazz',
+                moodColor: '#7B7FF0',
+                albumName: 'Page One',
+                durationMs: 250000,
+                reason: '보사노바와 재즈의 결이 부드럽게 이어져요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+            {
+                trackId: 'demo-jazz-3',
+                cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&q=80',
+                title: 'Birdland',
+                artist: 'Weather Report',
+                mood: '재즈',
+                moodKey: 'jazz',
+                moodColor: '#7B7FF0',
+                albumName: 'Heavy Weather',
+                durationMs: 355000,
+                reason: '퓨전 재즈의 전개를 바로 테스트하기 좋아요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+        ],
+    },
+    calm: {
+        todayMood: {
+            label: '평온',
+            icon: I.cloud,
+            color: '#7B7FF0',
+            soft: '#ECEDFD',
+            time: '밤 11:06',
+            analysis: [
+                { label: '차분함', pct: 84, color: '#7B7FF0' },
+                { label: '포근함', pct: 62, color: '#FFB648' },
+                { label: '여백', pct: 74, color: '#A39CAC' },
+            ],
+            track: {
+                cover: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=200&q=80',
+                title: 'Clair de Lune',
+                artist: 'Claude Debussy',
+            },
+        },
+        recentMoods: [
+            { day: '오늘', label: '평온', icon: I.cloud, color: '#7B7FF0', soft: '#ECEDFD' },
+            { day: '어제', label: '외로움', icon: I.droplets, color: '#7B7FF0', soft: '#ECEDFD' },
+            { day: '5일 전', label: '피로', icon: I.moon, color: '#6E6678', soft: '#F1ECE3' },
+        ],
+        recentTracks: [
+            {
+                trackId: 'demo-calm-1',
+                cover: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?w=200&q=80',
+                title: 'Clair de Lune',
+                artist: 'Claude Debussy',
+                mood: '평온',
+                moodKey: 'calm',
+                moodColor: '#7B7FF0',
+                albumName: 'Suite bergamasque',
+                durationMs: 300000,
+                reason: '차분한 밤공기처럼 잔잔하게 내려앉아요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+            {
+                trackId: 'demo-calm-2',
+                cover: 'https://images.unsplash.com/photo-1516280440614-37939bbacd81?w=200&q=80',
+                title: 'Sunset Lover',
+                artist: 'Petit Biscuit',
+                mood: '평온',
+                moodKey: 'calm',
+                moodColor: '#7B7FF0',
+                albumName: 'Presence',
+                durationMs: 195000,
+                reason: '부드러운 전자 질감으로 새벽 감성을 살려줘요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+            {
+                trackId: 'demo-calm-3',
+                cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&q=80',
+                title: 'Rhubarb',
+                artist: 'Aphex Twin',
+                mood: '평온',
+                moodKey: 'calm',
+                moodColor: '#7B7FF0',
+                albumName: 'Selected Ambient Works',
+                durationMs: 240000,
+                reason: '앰비언트의 여백이 생각을 천천히 가라앉혀줘요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+        ],
+    },
+    emotional: {
+        todayMood: {
+            label: '감성',
+            icon: I.smile,
+            color: '#FF6B5E',
+            soft: '#FFEAE6',
+            time: '오후 9:34',
+            analysis: [
+                { label: '감정선', pct: 86, color: '#FF6B5E' },
+                { label: '위로', pct: 70, color: '#7B7FF0' },
+                { label: '몰입', pct: 54, color: '#FFB648' },
+            ],
+            track: {
+                cover: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=200&q=80',
+                title: 'Someone Like You',
+                artist: 'Adele',
+            },
+        },
+        recentMoods: [
+            { day: '오늘', label: '감성', icon: I.smile, color: '#FF6B5E', soft: '#FFEAE6' },
+            { day: '어제', label: '외로움', icon: I.droplets, color: '#7B7FF0', soft: '#ECEDFD' },
+            { day: '3일 전', label: '불안', icon: I.alertCirc, color: '#C97EB6', soft: '#FAEAF7' },
+        ],
+        recentTracks: [
+            {
+                trackId: 'demo-emotional-1',
+                cover: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=200&q=80',
+                title: 'Someone Like You',
+                artist: 'Adele',
+                mood: '감성',
+                moodKey: 'emotional',
+                moodColor: '#FF6B5E',
+                albumName: '21',
+                durationMs: 285000,
+                reason: '감정선이 선명해서 테스트하기 쉬워요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+            {
+                trackId: 'demo-emotional-2',
+                cover: 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=200&q=80',
+                title: 'Fix You',
+                artist: 'Coldplay',
+                mood: '감성',
+                moodKey: 'emotional',
+                moodColor: '#FF6B5E',
+                albumName: 'X&Y',
+                durationMs: 294000,
+                reason: '위로하는 흐름과 고조가 자연스럽게 이어져요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+            {
+                trackId: 'demo-emotional-3',
+                cover: 'https://images.unsplash.com/photo-1470225636490-405e5d1b5c9b?w=200&q=80',
+                title: 'To Build a Home',
+                artist: 'The Cinematic Orchestra',
+                mood: '감성',
+                moodKey: 'emotional',
+                moodColor: '#FF6B5E',
+                albumName: 'Ma Fleur',
+                durationMs: 410000,
+                reason: '서정적인 분위기를 더 길게 끌고 가요.',
+                spotifyUrl: 'https://open.spotify.com',
+            },
+        ],
+    },
+};
+
+const getDemoHomeSnapshot = (preset) => DEMO_HOME_SNAPSHOTS[preset] || DEMO_HOME_SNAPSHOTS.focus;
+
+
 const getTodayString = () => {
     const d = new Date();
     return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
@@ -660,12 +926,17 @@ export default function HomePage() {
         calm: '밤공기 테스트',
         emotional: '감성 테스트',
     }[demoPresetKey] || '데모';
+    const demoHomeSnapshot = isDemoUser ? getDemoHomeSnapshot(demoPresetKey) : null;
 
     const todayMood = summaryLoaded
         ? buildTodayMoodCard(summary?.today_mood, summary?.latest_recommendation)
-        : TODAY_MOOD_RECORDED;
-    const recentMoods = summaryLoaded ? buildRecentMoodItems(summary?.recent_moods || []) : RECENT_MOODS;
-    const recentTracks = summaryLoaded ? buildRecentTrackItems(summary?.latest_recommendation) : RECENT_TRACKS;
+        : demoHomeSnapshot?.todayMood || TODAY_MOOD_RECORDED;
+    const recentMoods = summaryLoaded
+        ? buildRecentMoodItems(summary?.recent_moods || [])
+        : demoHomeSnapshot?.recentMoods || RECENT_MOODS;
+    const recentTracks = summaryLoaded
+        ? buildRecentTrackItems(summary?.latest_recommendation)
+        : demoHomeSnapshot?.recentTracks || RECENT_TRACKS;
 
     const showFavoriteToast = (message) => {
         setToastMessage(message);

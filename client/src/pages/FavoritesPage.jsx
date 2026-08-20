@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import { getFavorites, removeFavorite } from '../services/apiClient';
+import { useAuth } from '../contexts/AuthContext';
 
 
 
@@ -405,12 +406,21 @@ const EmptyState = () => (
 
 
 export default function FavoritesPage() {
+    const { user } = useAuth();
     const [tracks, setTracks] = useState([]);
     const [activeMood, setActiveMood] = useState('all');
     const [viewMode, setViewMode] = useState('list');
     const [searchQuery, setSearchQuery] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
+    const isDemoUser = user?.auth_provider === 'demo';
+    const demoPresetKey = (user?.providerUserId || user?.provider_user_id || '').split(':')[1] || 'focus';
+    const demoPresetLabel = {
+        focus: '집중 테스트',
+        jazz: '재즈 테스트',
+        calm: '밤공기 테스트',
+        emotional: '감성 테스트',
+    }[demoPresetKey] || '데모';
 
 
     const [toastVisible, setToastVisible] = useState(false);
@@ -495,6 +505,40 @@ export default function FavoritesPage() {
                     {loadError && (
                         <div className="fav-fu mb-6 px-4 py-3 rounded-2xl border border-[rgba(255,107,94,0.22)] bg-[#FFEAE6] text-[13px] text-[#8B2218]">
                             {loadError}
+                        </div>
+                    )}
+
+                    {isDemoUser && (
+                        <div className="fav-fu mb-6 rounded-[24px] border border-[#C7C9FA] bg-[#F2F3FF] px-5 py-5 shadow-[0_10px_30px_-18px_rgba(123,127,240,0.4)]">
+                            <div className="flex flex-col gap-4 min-[700px]:flex-row min-[700px]:items-end min-[700px]:justify-between">
+                                <div>
+                                    <div className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[5px] text-[11px] font-bold tracking-[0.05em] text-white">
+                                        DEMO
+                                    </div>
+                                    <h2 className="mt-3 text-[18px] font-extrabold tracking-[-0.02em] text-[#211C26]">
+                                        {demoPresetLabel} 좋아요 샘플이 들어 있어요
+                                    </h2>
+                                    <p className="mt-1.5 max-w-[620px] text-[13.5px] leading-[1.7] text-[#4B4FD0]">
+                                        좋아요를 눌렀다 취소해보면서 반영 상태를 확인해보세요. 감정별 필터와 검색,
+                                        Spotify 이동까지 실제 흐름으로 테스트할 수 있어요.
+                                    </p>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Link
+                                        to="/mood-input"
+                                        className="inline-flex items-center justify-center rounded-full bg-[#211C26] px-4 py-2.5 text-[13px] font-bold text-white no-underline transition-all duration-200 hover:-translate-y-px"
+                                    >
+                                        새 추천 받기
+                                    </Link>
+                                    <Link
+                                        to="/history"
+                                        className="inline-flex items-center justify-center rounded-full border border-[#C7C9FA] bg-white px-4 py-2.5 text-[13px] font-bold text-[#4B4FD0] no-underline transition-colors duration-150 hover:border-[#7B7FF0]"
+                                    >
+                                        기록도 보기
+                                    </Link>
+                                </div>
+                            </div>
                         </div>
                     )}
 

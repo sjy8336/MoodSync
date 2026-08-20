@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { recommendMood } from '../services/apiClient';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import { useAuth } from '../contexts/AuthContext';
 
 const Ic = ({ d, size = 20, color = 'currentColor', fill = 'none', sw = 1.8, className = '' }) => (
     <svg
@@ -123,7 +124,35 @@ const VIBE_OPTIONS = [
     { value: '몰입되는', icon: I.target },
 ];
 
+const DEMO_QUICK_FILL = {
+    focus: {
+        title: '집중 예시',
+        mood: 'focused',
+        text: '마감이 다가와서 집중이 잘 되는 음악이 필요해요. 너무 시끄럽지 않고 몰입이 이어졌으면 좋겠어요.',
+        vibes: ['몰입되는', '차분한'],
+    },
+    jazz: {
+        title: '재즈 예시',
+        mood: 'excited',
+        text: '스윙 느낌이 나면서도 너무 과하지 않은 재즈를 듣고 싶어요. 기분 전환이 되는 곡이면 좋겠어요.',
+        vibes: ['신나는', '감성적인'],
+    },
+    calm: {
+        title: '밤공기 예시',
+        mood: 'calm',
+        text: '조용하고 잔잔한 음악으로 생각을 정리하고 싶어요. 밤에 듣기 좋은 편안한 분위기를 원해요.',
+        vibes: ['잔잔한', '위로되는'],
+    },
+    emotional: {
+        title: '감성 예시',
+        mood: 'sad',
+        text: '조금 울컥하는 날이라 감정선을 건드리는 음악이 듣고 싶어요. 너무 밝기보다는 위로가 되었으면 해요.',
+        vibes: ['감성적인', '위로되는'],
+    },
+};
+
 export default function MoodInputPage() {
+    const { user } = useAuth();
     const [text, setText] = useState('');
     const [mood, setMood] = useState('');
     const [vibes, setVibes] = useState([]);
@@ -134,6 +163,15 @@ export default function MoodInputPage() {
     const abortControllerRef = useRef(null);
     const requestIdRef = useRef(0);
     const errorRef = useRef(null);
+    const demoAutofillRef = useRef(false);
+    const isDemoUser = user?.auth_provider === 'demo';
+    const demoPresetKey = (user?.providerUserId || user?.provider_user_id || '').split(':')[1] || 'focus';
+    const demoPresetLabel = {
+        focus: '집중 테스트',
+        jazz: '재즈 테스트',
+        calm: '밤공기 테스트',
+        emotional: '감성 테스트',
+    }[demoPresetKey] || '데모';
 
     useEffect(() => {
         const check = () => setIsMobile(window.innerWidth < 560);
@@ -151,6 +189,14 @@ export default function MoodInputPage() {
             errorRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     }, [error]);
+    useEffect(() => {
+        if (!isDemoUser || demoAutofillRef.current) return;
+        const scenario = DEMO_QUICK_FILL[demoPresetKey] || DEMO_QUICK_FILL.focus;
+        setMood(scenario.mood);
+        setText(scenario.text);
+        setVibes(scenario.vibes);
+        demoAutofillRef.current = true;
+    }, [demoPresetKey, isDemoUser]);
 
     const toggleVibe = (v) => {
         setVibes((prev) => {
@@ -206,6 +252,16 @@ export default function MoodInputPage() {
         setLoading(false);
     };
 
+    const applyDemoScenario = (key) => {
+        if (loading) return;
+        const scenario = DEMO_QUICK_FILL[key] || DEMO_QUICK_FILL.focus;
+        demoAutofillRef.current = true;
+        setMood(scenario.mood);
+        setText(scenario.text);
+        setVibes(scenario.vibes);
+        setError('');
+    };
+
     const canSubmit = !!mood && !loading;
     const selectedMood = MOOD_OPTIONS.find((m) => m.value === mood);
     const activeTheme = selectedMood ? MOOD_THEME[selectedMood.family] : MOOD_THEME.lavender;
@@ -251,6 +307,68 @@ export default function MoodInputPage() {
                                 감정을 고르면 그 순간에 맞는 음악을 찾아드려요.
                             </p>
                         </div>
+
+                        {isDemoUser && (
+                            <div className="opacity-0 [animation:ms-fadeUp_0.6s_ease_forwards] [animation-delay:0.08s] mb-6 rounded-3xl border border-[#C7C9FA] bg-[#F2F3FF] p-5 shadow-[0_10px_30px_-18px_rgba(123,127,240,0.45)]">
+                                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                                    <div>
+                                        <div className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[5px] text-[11px] font-bold tracking-[0.05em] text-white">
+                                            DEMO
+                                        </div>
+                                        <p className="mt-2 text-[13px] font-semibold text-[#4B4FD0]">
+                                            {demoPresetLabel} 상태예요. 아래 예시를 눌러 바로 추천 흐름을 테스트해보세요.
+                                        </p>
+                                    </div>
+                                    <span className="text-[11.5px] font-semibold text-[#4B4FD0]">
+                                        현재 데모 프리셋: {demoPresetKey}
+                                    </span>
+                                </div>
+
+                                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                                    {Object.entries(DEMO_QUICK_FILL).map(([key, scenario]) => {
+                                        const active = demoPresetKey === key;
+                                        return (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                onClick={() => applyDemoScenario(key)}
+                                                disabled={loading}
+                                                className={`rounded-2xl border px-4 py-4 text-left transition-all duration-200 ${
+                                                    active
+                                                        ? 'border-[#7B7FF0] bg-white shadow-[0_6px_18px_-10px_rgba(123,127,240,0.35)]'
+                                                        : 'border-[#D8D9FB] bg-white/75 hover:border-[#7B7FF0] hover:bg-white'
+                                                } ${loading ? 'cursor-not-allowed opacity-60' : 'cursor-pointer'}`}
+                                            >
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-[13px] font-bold text-[#211C26]">{scenario.title}</span>
+                                                    {active && (
+                                                        <span className="rounded-full bg-[#ECEDFD] px-2 py-[4px] text-[10px] font-bold text-[#4B4FD0]">
+                                                            현재
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="mt-2 max-h-[3.2em] overflow-hidden text-[12.5px] leading-[1.6] text-[#6E6678]">
+                                                    {scenario.text}
+                                                </p>
+                                                <div className="mt-3 flex flex-wrap gap-1.5">
+                                                    <span className="rounded-full bg-[#F1ECE3] px-2 py-[3px] text-[10.5px] font-semibold text-[#6E6678]">
+                                                        {scenario.mood}
+                                                    </span>
+                                                    {scenario.vibes.map((vibe) => (
+                                                        <span
+                                                            key={vibe}
+                                                            className="rounded-full bg-[#ECEDFD] px-2 py-[3px] text-[10.5px] font-semibold text-[#4B4FD0]"
+                                                        >
+                                                            {vibe}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
 
                         <div className="flex flex-col gap-4">
 

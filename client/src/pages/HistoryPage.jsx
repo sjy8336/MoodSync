@@ -4,6 +4,7 @@ import Header from '../components/Header';
 import Footer from '../components/Footer';
 import FavoriteToast from '../components/FavoriteToast';
 import { getMoodHistory, getFavorites, saveFavorite, removeFavorite } from '../services/apiClient';
+import { useAuth } from '../contexts/AuthContext';
 
 
 const Ic = ({ d, size = 20, color = 'currentColor', fill = 'none', sw = 1.8, className = '' }) => (
@@ -904,9 +905,18 @@ function DateRecordCard({ record, isExpanded, onToggle, onDelete, favoriteIds, o
 
 
 export default function HistoryPage() {
+    const { user } = useAuth();
     const bp = useBreakpoint();
     const isMobile = bp === 'mobile';
     const isTablet = bp === 'tablet';
+    const isDemoUser = user?.auth_provider === 'demo';
+    const demoPresetKey = (user?.providerUserId || user?.provider_user_id || '').split(':')[1] || 'focus';
+    const demoPresetLabel = {
+        focus: '집중 테스트',
+        jazz: '재즈 테스트',
+        calm: '밤공기 테스트',
+        emotional: '감성 테스트',
+    }[demoPresetKey] || '데모';
 
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
@@ -1114,6 +1124,42 @@ export default function HistoryPage() {
                         <p className={`fu text-[12.5px] text-[#A39CAC] mb-6 ${getDelayClass(0.07)}`}>
                             {loadError} 임시로 예시 데이터를 보여드리고 있어요.
                         </p>
+                    )}
+
+                    {isDemoUser && (
+                        <div
+                            className={`fu mb-8 rounded-[24px] border border-[#C7C9FA] bg-[#F2F3FF] px-5 py-5 shadow-[0_10px_30px_-18px_rgba(123,127,240,0.4)] ${getDelayClass(0.085)}`}
+                        >
+                            <div className="flex flex-col gap-4 min-[700px]:flex-row min-[700px]:items-end min-[700px]:justify-between">
+                                <div>
+                                    <div className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[5px] text-[11px] font-bold tracking-[0.05em] text-white">
+                                        DEMO
+                                    </div>
+                                    <h2 className="mt-3 text-[18px] font-extrabold tracking-[-0.02em] text-[#211C26]">
+                                        {demoPresetLabel} 기록이 미리 들어 있어요
+                                    </h2>
+                                    <p className="mt-1.5 max-w-[620px] text-[13.5px] leading-[1.7] text-[#4B4FD0]">
+                                        날짜를 눌러 샘플 감정 흐름과 추천 결과를 바로 확인할 수 있어요. 캘린더,
+                                        감정 분포, 최근 추천 카드까지 실제처럼 테스트해보세요.
+                                    </p>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Link
+                                        to="/mood-input"
+                                        className="inline-flex items-center justify-center rounded-full bg-[#211C26] px-4 py-2.5 text-[13px] font-bold text-white no-underline transition-all duration-200 hover:-translate-y-px"
+                                    >
+                                        예시 입력해보기
+                                    </Link>
+                                    <Link
+                                        to="/favorites"
+                                        className="inline-flex items-center justify-center rounded-full border border-[#C7C9FA] bg-white px-4 py-2.5 text-[13px] font-bold text-[#4B4FD0] no-underline transition-colors duration-150 hover:border-[#7B7FF0]"
+                                    >
+                                        좋아요 데이터 보기
+                                    </Link>
+                                </div>
+                            </div>
+                        </div>
                     )}
 
 
