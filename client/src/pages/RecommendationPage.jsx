@@ -838,7 +838,13 @@ export default function RecommendationPage() {
         [toastTimer]
     );
 
-    const tracks = result?.tracks ?? result?.recommendation?.tracks ?? [];
+    const topLevelTracks = Array.isArray(result?.tracks) ? result.tracks : [];
+    const persistedTracks = Array.isArray(result?.recommendation?.tracks)
+        ? result.recommendation.tracks
+        : [];
+    // Deferred copy responses can briefly expose different track arrays. Keep
+    // valid selection cards instead of letting a shorter stale array win.
+    const tracks = topLevelTracks.length >= persistedTracks.length ? topLevelTracks : persistedTracks;
     const mood = result?.mood ?? result?.mood_record?.mood ?? payload?.mood ?? '';
     const rawNote = payload?.text ?? result?.recommendation?.query ?? result?.mood_record?.text ?? '';
     const { freeText, vibes } = parseInputNote(rawNote);
@@ -847,6 +853,23 @@ export default function RecommendationPage() {
     const heroMessage = buildHeroMessage(moodLabel, result?.recommendation?.message, tracks.length);
     const generatedAtLabel = formatGeneratedAt(generatedAt);
     const generationProfile = result?.recommendation?.generation_profile || {};
+    useEffect(() => {
+        if (!result) return;
+        console.info('[Mood Sync] 추천 렌더링 count', {
+            topLevelTrackCount: topLevelTracks.length,
+            persistedTrackCount: persistedTracks.length,
+            renderedTrackCount: tracks.length,
+            targetCount: generationProfile.target_count ?? generationProfile.selection_profile?.target_count ?? 6,
+            selectedBeforeValidation: generationProfile.selection_profile?.selected_tracks_before_validation_count,
+            selectedAfterValidation: generationProfile.selection_profile?.selected_tracks_after_validation_count,
+            refillCount: generationProfile.selection_profile?.refill_count,
+            tracksSentToReasonGenerator: generationProfile.tracks_sent_to_reason_generator,
+            geminiReasonCount: generationProfile.gemini_reason_count,
+            parsedReasonCount: generationProfile.parsed_reason_count,
+            fallbackReasonCount: generationProfile.fallback_reason_count,
+            renderedCardCount: tracks.length,
+        });
+    }, [result, topLevelTracks.length, persistedTracks.length, tracks.length, generationProfile]);
     const isAiCopyPending = Boolean(generationProfile.gemini_copy_pending);
     const aiCopyFailed = Boolean(generationProfile.gemini_copy_attempted) && !generationProfile.gemini_copy_succeeded;
 
