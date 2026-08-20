@@ -40,6 +40,7 @@ from app.services.spotify_service import (
     _split_context,
     build_recommendation_message,
     build_track_reason,
+    ensure_recommendation_count,
     recommend_tracks,
     validate_hard_constraints,
 )
@@ -381,6 +382,20 @@ def _uses_unselected_family_energy_feature(
     return any(marker in first_sentence for marker in ("에너지", "경쾌", "활기찬"))
 
 
+def _is_feature_role_compatible(track: TrackSummary, mood: str, input_text: str, index: int) -> bool:
+    """Reject a reason whose role contradicts verified track facts."""
+    role = _recommendation_role(mood, index, input_text, reason_facts=track.reason_facts)
+    focus = role.get("focus", "")
+    facts = track.reason_facts or {}
+    if "장시간" not in input_text and "오래 앉" not in input_text and "오랫동안" not in input_text:
+        return True
+    if focus in {"가벼운 리듬 더하기", "단조로움 줄이기"} and facts.get("light_rhythm_fit") is not True:
+        return False
+    if focus == "낮은 자극으로 배경 유지" and facts.get("distraction_risk") == "high":
+        return False
+    return True
+
+
 def _is_safe_recommendation_message(
     message: object,
     input_text: str = "",
@@ -470,6 +485,7 @@ def _apply_recommendation_copy(
                 or _leaks_dawn_sentimental_context(reason, input_text)
                 or _uses_unselected_family_energy_feature(reason, track, index, input_text, mood)
                 or _mentions_unsupported_music_detail(reason, track)
+                or not _is_feature_role_compatible(track, mood, input_text, index)
                 or not _has_verified_grounding(item, track)
             ):
                 continue
@@ -623,8 +639,18 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
     )
     # Repeat the validation at the workflow boundary so later changes cannot
     # accidentally return an unverified track for an explicit hard request.
+    selected_count_before_validation = len(tracks)
     tracks = validate_hard_constraints(tracks, state["payload"].text)
     tracks = _enforce_korean_band_rock_selection(tracks, state["payload"].text, 6)
+    selected_count_after_validation = len(tracks)
+    tracks = ensure_recommendation_count(
+        tracks,
+        state.get("mood", "calm"),
+        state["payload"].text,
+        access_token or None,
+        target=6,
+        selection_guidance=state.get("selection_guidance"),
+    )
     korean_band_rock_preference = _korean_band_rock_preference_strength(state["payload"].text)
     exact_korean_band_rock_tracks = [track for track in tracks if _is_korean_band_rock_track(track)]
     return {
@@ -636,6 +662,10 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
             "korean_band_rock_exact_count": len(exact_korean_band_rock_tracks),
             "non_matching_track_count": len(tracks) - len(exact_korean_band_rock_tracks),
             "selected_track_titles": [track.display_title or track.name for track in tracks],
+            "target_count": 6,
+            "selected_tracks_before_validation_count": selected_count_before_validation,
+            "selected_tracks_after_validation_count": selected_count_after_validation,
+            "final_rendered_track_count": len(tracks),
         },
     }
 
@@ -687,6 +717,8 @@ def _compose_copy_and_track_reasons(state: RecommendationWorkflowState) -> dict[
             "gemini_copy_attempted": gemini_copy_attempted,
             "gemini_copy_succeeded": bool(recommendation_copy),
             "gemini_reason_count": len(reason_map),
+            "parsed_reason_count": len(reason_map),
+            "fallback_reason_used": len(reason_map) < len(enriched_tracks),
             "gemini_copy_error": gemini_copy_error,
             "gemini_copy_pending": bool(state.get("defer_gemini_copy")),
             "reason_source": "gemini" if reason_map else "fallback",

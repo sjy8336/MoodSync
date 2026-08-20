@@ -370,7 +370,11 @@ def _has_valid_track_identity(track: TrackSummary) -> bool:
         return False
     if "____" in title or "unknown track" in title:
         return False
-    return bool((track.track_id or "").strip())
+    if not (track.track_id or "").strip() or not (track.artist_name or "").strip():
+        return False
+    if track.recording_match_confidence is not None and track.recording_match_confidence < 0.7:
+        return False
+    return True
 
 
 def _build_reason_facts(name: str, artist_name: str, seed_genres: list[str] | None = None) -> dict[str, object]:
@@ -417,6 +421,24 @@ def _build_contextual_reason_facts(name: str, artist_name: str, context_text: st
                 ("rhythmic_strong_penalty", bool(tags & {"rhythmic_strong", "hard-bop", "fusion", "swing"})),
             )
             if present
+        ]
+    if _is_long_focus_request(context_text):
+        tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
+        moods = {str(mood).lower() for mood in facts.get("moods", []) if mood}
+        facts["low_stimulation_fit"] = bool(tags & {"calm", "soft", "ambient", "relaxed"} or "calm" in moods)
+        facts["sustained_focus_fit"] = bool(tags & {"focused", "calm", "soft", "ambient", "instrumental"} or moods & {"focused", "calm"})
+        facts["calm_fit"] = bool("calm" in tags or "calm" in moods)
+        facts["relaxed_flow_fit"] = bool(tags & {"relaxed", "calm", "soft", "ambient"})
+        facts["light_rhythm_fit"] = bool(tags & {"groove", "rhythmic", "rhythmic_light", "bossa-nova"})
+        facts["distraction_risk"] = "high" if tags & {"high_energy", "driving", "busy", "dense", "prominent_vocal"} else "low" if facts["low_stimulation_fit"] else "unknown"
+        facts["focus_ranking_factors"] = [
+            key for key, present in (
+                ("low_stimulation", facts["low_stimulation_fit"]),
+                ("sustained_focus", facts["sustained_focus_fit"]),
+                ("calm", facts["calm_fit"]),
+                ("light_rhythm", facts["light_rhythm_fit"]),
+                ("distraction_risk", facts["distraction_risk"] == "low"),
+            ) if present
         ]
     return facts
 
@@ -818,7 +840,9 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         })
     return {
         "previous_request_genre": None,
+        "previous_request_explicit_genre": None,
         "current_request_genre": current_genre,
+        "current_request_explicit_genre": current_genre,
         "genre_state_reset": True,
         "previous_candidate_pool_reused": False,
         "current_retrieval_query": (
@@ -829,6 +853,7 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             if explicit_genres
             else {"low_stimulation": 1.0, "sustained_focus": 1.0, "calm": 0.9, "light_rhythm": 0.7}
         ),
+        "genre_bonus": 0 if not explicit_genres else 1.0,
         "selected_track_count": len(tracks),
         "selected_tracks": selected_tracks,
     }
@@ -1263,10 +1288,16 @@ def build_recommendation_message(
         return "지금의 좋은 집중 흐름은 유지하면서도 너무 과하지 않게 활기를 더할 수 있는 곡들을 골라봤어요."
 
     if long_focus_request:
-        return (
-            "노트북 앞에 오래 앉아 있을 때 부담 없이 이어 듣기 좋은 차분하고 잔잔한 곡들을 골라봤어요. "
-            "너무 단조롭지 않도록 가벼운 리듬감이 느껴지는 곡들도 함께 담았어요."
+        focus_facts = [track.reason_facts or {} for track in (tracks or [])]
+        calm_count = sum(bool(facts.get("calm_fit")) for facts in focus_facts)
+        light_rhythm_count = sum(bool(facts.get("light_rhythm_fit")) for facts in focus_facts)
+        rhythm_clause = (
+            "일부 곡에는 가벼운 리듬감도 확인돼요."
+            if light_rhythm_count
+            else "리듬감이 확인되지 않은 곡의 특징은 임의로 덧붙이지 않았어요."
         )
+        calm_clause = "차분한 곡들을 중심으로" if calm_count else "오래 이어 듣기 부담이 적은 곡들을 중심으로"
+        return f"노트북 앞에 오래 앉아 있을 때 {calm_clause} 골라봤어요. {rhythm_clause}"
 
     if _is_family_trip_request(context_text):
         season_text = "여름" if _current_season() == "summer" else "지금 계절"
@@ -2468,6 +2499,37 @@ def _fallback_tracks(
     return _enforce_korean_band_rock_selection(
         validate_hard_constraints(resolved[:limit], context_text), context_text, limit
     )
+
+
+def ensure_recommendation_count(
+    tracks: list[TrackSummary],
+    mood: str,
+    context_text: str | None,
+    access_token: str | None,
+    target: int = FALLBACK_LIMIT,
+    selection_guidance: dict[str, Any] | None = None,
+) -> list[TrackSummary]:
+    """Refill only with newly validated ranked candidates; never drop valid tracks for bad copy."""
+    valid = validate_hard_constraints(tracks, context_text)
+    if len(valid) >= target:
+        return valid[:target]
+    fallback = _fallback_tracks(
+        mood,
+        access_token=access_token,
+        context_text=context_text,
+        limit=target,
+        selection_guidance=selection_guidance,
+    )
+    seen = {(track.name.strip().lower(), track.artist_name.strip().lower()) for track in valid}
+    for candidate in validate_hard_constraints(fallback, context_text):
+        key = (candidate.name.strip().lower(), candidate.artist_name.strip().lower())
+        if key in seen:
+            continue
+        valid.append(candidate)
+        seen.add(key)
+        if len(valid) >= target:
+            break
+    return valid[:target]
 
 
 def recommend_tracks(

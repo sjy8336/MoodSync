@@ -9,9 +9,10 @@ from app.models.favorite import Favorite
 from app.models.mood_record import MoodRecord
 from app.models.recommendation import Recommendation
 from app.schemas.track import TrackSummary
+from app.services.spotify_service import _get_app_access_token, _search_track
 
 
-DEMO_CONTENT_VERSION = 6
+DEMO_CONTENT_VERSION = 7
 
 
 def _demo_tracks(preset: str) -> list[TrackSummary]:
@@ -300,11 +301,29 @@ def _demo_tracks(preset: str) -> list[TrackSummary]:
                 "recommendation_role": role,
                 "tags": ["demo", preset or "focus"],
             }
-    return [TrackSummary.model_validate(track) for track in selected_tracks]
+    tracks = [TrackSummary.model_validate(track) for track in selected_tracks]
+    access_token = _get_app_access_token()
+    if not access_token:
+        return tracks
+
+    enriched_tracks: list[TrackSummary] = []
+    for track in tracks:
+        spotify_track = _search_track(access_token, track.name, track.artist_name, track.reason or '')
+        if spotify_track is None:
+            enriched_tracks.append(track)
+            continue
+
+        spotify_track.reason = track.reason
+        spotify_track.reason_facts = {
+            **spotify_track.reason_facts,
+            **track.reason_facts,
+        }
+        enriched_tracks.append(spotify_track)
+    return enriched_tracks
 
 
-def _demo_favorite_tracks(preset: str) -> list[dict[str, object]]:
-    tracks = _demo_tracks(preset)
+def _demo_favorite_tracks(preset: str, tracks: list[TrackSummary] | None = None) -> list[dict[str, object]]:
+    tracks = tracks or _demo_tracks(preset)
     return [
         {
             "track_id": track.track_id,
@@ -420,7 +439,7 @@ def seed_demo_user_content(db: Session, user_id: int, preset: str | None = None)
             )
         )
 
-    for index, favorite in enumerate(_demo_favorite_tracks(preset_key)):
+    for index, favorite in enumerate(_demo_favorite_tracks(preset_key, demo_tracks)):
         db.add(
             Favorite(
                 user_id=user_id,

@@ -91,6 +91,8 @@ _LONG_FOCUS_ROLES = [
     ("낮은 자극으로 배경 유지", "음악이 지나치게 앞에 나서지 않는 분위기를 원할 때"),
     ("단조로움 줄이기", "차분한 흐름 안에서 작은 리듬 변화를 듣고 싶을 때"),
     ("긴 청취에 맞추기", "오래 이어 들어도 강한 자극을 피하고 싶을 때"),
+    ("차분한 배경으로 이어 듣기", "음악이 앞에 나서지 않는 분위기로 오래 듣고 싶을 때"),
+    ("집중 흐름에 무리 없이 맞추기", "차분한 흐름을 오래 이어가고 싶을 때"),
 ]
 
 _CALM_JAZZ_ROLES = [
@@ -603,7 +605,21 @@ def _recommendation_role(
     elif is_dawn_sentimental_context:
         roles = _DAWN_SENTIMENTAL_ROLES
     elif is_long_focus_context:
-        roles = _LONG_FOCUS_ROLES
+        raw_tags = reason_facts.get("tags", []) if isinstance(reason_facts, dict) else []
+        tags = {str(tag).strip().lower() for tag in raw_tags if str(tag).strip()}
+        # Only assign the rhythm-variation role when the selected track has a
+        # supplied rhythm/groove fact. Unknown tracks stay in neutral roles.
+        if tags & {"groove", "rhythmic", "rhythmic_light", "bossa-nova"}:
+            roles = _LONG_FOCUS_ROLES
+        else:
+            roles = [
+                _LONG_FOCUS_ROLES[0],
+                _LONG_FOCUS_ROLES[1],
+                _LONG_FOCUS_ROLES[3],
+                _LONG_FOCUS_ROLES[6],
+                _LONG_FOCUS_ROLES[5],
+                _LONG_FOCUS_ROLES[7],
+            ]
     elif is_calm_jazz_context:
         roles = _CALM_JAZZ_ROLES
     elif has_study_flow:
