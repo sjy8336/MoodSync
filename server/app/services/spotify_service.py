@@ -582,7 +582,7 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "Bad Habit", "artist_name": "Steve Lacy", "moods": ["lonely", "sad", "focused"], "tags": ["rnb", "groove"]},
     {"name": "Luv (sic) Part 3", "artist_name": "Nujabes", "moods": ["lonely", "sad", "focused"], "tags": ["emotional", "hip-hop"]},
     {"name": "Take Five", "artist_name": "The Dave Brubeck Quartet", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "rhythmic_strong"], "instrument_source": "curated_catalog_metadata"},
-    {"name": "So What", "artist_name": "Miles Davis", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "So What", "artist_name": "Miles Davis", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed", "rhythmic_light", "groove"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Blue in Green", "artist_name": "Miles Davis", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Autumn Leaves", "artist_name": "Chet Baker", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "vocal-jazz", "standard"]},
     {"name": "My Favorite Things", "artist_name": "John Coltrane", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed", "rhythmic_strong"], "instrument_source": "curated_catalog_metadata"},
@@ -604,7 +604,7 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "To Build a Home", "artist_name": "The Cinematic Orchestra", "moods": ["sad", "lonely"], "tags": ["soft", "dreamy"]},
     {"name": "Love Poem", "artist_name": "IU", "moods": ["sad", "lonely", "anxious"], "tags": ["korean", "soft", "emotional", "comfort"]},
     {"name": "Through the Night", "artist_name": "IU", "moods": ["sad", "lonely", "anxious", "calm"], "tags": ["korean", "soft", "calm", "comfort"]},
-    {"name": "Best Part", "artist_name": "Daniel Caesar feat. H.E.R.", "moods": ["sad", "lonely", "anxious", "calm"], "tags": ["rnb", "soul", "soft", "warm", "love"]},
+    {"name": "Best Part", "artist_name": "Daniel Caesar feat. H.E.R.", "moods": ["sad", "lonely", "anxious", "calm"], "tags": ["rnb", "soul", "soft", "warm", "love", "prominent_vocal"]},
     {"name": "Like I'm Gonna Lose You", "artist_name": "Meghan Trainor feat. John Legend", "moods": ["sad", "lonely", "anxious"], "tags": ["pop", "soft", "emotional", "warm", "love"]},
     {"name": "Ditto", "artist_name": "NewJeans", "moods": ["lonely", "calm", "anxious"], "tags": ["korean", "dreamy"]},
     {"name": "Hype Boy", "artist_name": "NewJeans", "moods": ["excited", "happy", "focused"], "tags": ["korean", "upbeat"]},
@@ -878,6 +878,13 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             "sustained_focus_fit": facts.get("sustained_focus_fit"),
             "distraction_risk": facts.get("distraction_risk"),
             "feature_role_compatibility": facts.get("feature_role_compatibility"),
+            "playlist_role": (
+                "light_rhythm"
+                if facts.get("light_rhythm_fit")
+                else "calm_anchor"
+                if facts.get("low_stimulation_fit")
+                else "bridge"
+            ),
             "final_ranking_score": facts.get("final_ranking_score"),
         })
     return {
@@ -1657,16 +1664,22 @@ def _sleep_feature_sentence(track_tags: list[str], track_moods: list[str]) -> st
 def _focus_feature_sentence(track_tags: list[str], track_moods: list[str]) -> str | None:
     tags = {str(tag).lower() for tag in track_tags if tag}
     moods = {str(mood).lower() for mood in track_moods if mood}
+    if "prominent_vocal" in tags:
+        return "보컬이 중심이 되는 곡이에요."
+    if "bossa-nova" in tags:
+        return "보사노바 계열의 가벼운 리듬이 이어지는 재즈 연주곡이에요."
+    if "rhythmic_light" in tags or "groove" in tags:
+        return "잔잔한 분위기 안에 가벼운 리듬감이 있는 곡이에요."
     if {"jazz", "standard"}.issubset(tags):
-        return "차분한 스탠더드 재즈 분위기가 안정적으로 이어지는 곡이에요."
+        return "스탠더드 재즈 연주가 중심인 곡이에요."
     if {"rnb", "groove"}.issubset(tags):
         return "부드러운 R&B와 가벼운 그루브가 함께 느껴지는 곡이에요."
     if {"jazz", "instrumental"}.issubset(tags):
-        return "재즈 연주가 중심이면서 자극이 과하지 않은 곡이에요."
-    if "rhythmic" in tags or "groove" in tags:
-        return "잔잔한 분위기 안에 가벼운 리듬감이 있는 곡이에요."
+        return "재즈 연주가 중심인 곡이에요."
+    if "piano" in tags and "instrumental" in tags:
+        return "피아노 중심의 연주곡이에요."
     if "calm" in moods or "calm" in tags:
-        return "차분한 분위기가 안정적으로 이어지는 곡이에요."
+        return "차분한 분위기의 곡이에요."
     if "soft" in tags:
         return "부드러운 분위기가 오래 이어 듣기 좋은 곡이에요."
     if "focused" in moods or "focused" in tags:
