@@ -456,10 +456,15 @@ def _attach_spotify_recording_facts(facts: dict[str, object], track: TrackSummar
 
 
 def _build_candidate_reason_facts(
-    item: dict[str, object], context_text: str | None, mood: str
+    item: dict[str, object],
+    context_text: str | None,
+    mood: str,
+    recent_track_keys: set[str] | None = None,
 ) -> dict[str, object]:
     facts = _build_contextual_reason_facts(str(item["name"]), str(item["artist_name"]), context_text)
-    facts["final_ranking_score"] = _score_fallback_candidate(item, mood, context_text)
+    facts["final_ranking_score"] = _score_fallback_candidate(item, mood, context_text, recent_track_keys)
+    if item.get("selection_category"):
+        facts["selection_category"] = item["selection_category"]
     return facts
 
 
@@ -963,6 +968,74 @@ def _map_track(track: dict, mood_label: str, seed_genres: list[str]) -> TrackSum
         reason_facts=reason_facts,
         reason=reason,
     )
+
+
+def _track_summary_category(track: TrackSummary) -> str:
+    facts = track.reason_facts if isinstance(track.reason_facts, dict) else {}
+    tags = {str(tag).strip().lower() for tag in facts.get("tags", []) if tag}
+    return next(
+        (
+            value
+            for value in (
+                "jazz", "classical", "ambient", "electronic", "rnb",
+                "rock", "jpop", "pop", "hip-hop",
+            )
+            if value in tags
+        ),
+        "other",
+    )
+
+
+def _select_diverse_track_summaries(
+    tracks: list[TrackSummary],
+    limit: int,
+    recent_track_keys: set[str] | None = None,
+) -> list[TrackSummary]:
+    """Choose from a wider ranked pool while avoiding recent repeats."""
+    if len(tracks) <= limit and not recent_track_keys:
+        return tracks[:limit]
+
+    recent_keys = recent_track_keys or set()
+    ranked = sorted(
+        enumerate(tracks),
+        key=lambda item: (
+            _track_history_key(item[1].name, item[1].artist_name) in recent_keys,
+            -int((item[1].reason_facts or {}).get("popularity") or 0),
+            item[0],
+        ),
+    )
+    pool = [track for _, track in ranked[: max(limit * 3, limit)]]
+    selected: list[TrackSummary] = []
+    seen: set[tuple[str, str]] = set()
+    seen_artists: set[str] = set()
+    category_counts: dict[str, int] = {}
+
+    def add(track: TrackSummary) -> None:
+        key = (track.name.strip().lower(), track.artist_name.strip().lower())
+        if key in seen:
+            return
+        seen.add(key)
+        selected.append(track)
+        seen_artists.add(key[1])
+        category = _track_summary_category(track)
+        category_counts[category] = category_counts.get(category, 0) + 1
+
+    for track in pool:
+        key = (track.name.strip().lower(), track.artist_name.strip().lower())
+        category = _track_summary_category(track)
+        if key in seen or key[1] in seen_artists:
+            continue
+        if category_counts.get(category, 0) >= 2 and len(selected) < limit - 1:
+            continue
+        add(track)
+        if len(selected) >= limit:
+            return selected
+
+    for track in pool:
+        add(track)
+        if len(selected) >= limit:
+            break
+    return selected[:limit]
 
 
 def _attach_particle(word: str, consonant: str = "이", vowel: str = "가") -> str:
@@ -1994,7 +2067,16 @@ def _build_spotify_search_url(name: str, artist_name: str) -> str:
     return f"https://open.spotify.com/search/{query[2:]}"
 
 
-def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_text: str | None) -> int:
+def _track_history_key(name: object, artist_name: object) -> str:
+    return f"{_canonical_track_token(str(name or ''))}|{_canonical_track_token(str(artist_name or ''))}"
+
+
+def _score_fallback_candidate(
+    candidate: dict[str, object],
+    mood: str,
+    context_text: str | None,
+    recent_track_keys: set[str] | None = None,
+) -> int:
     score = 0
     candidate_moods = {str(item) for item in candidate.get("moods", []) if item}
     candidate_tags = {str(item) for item in candidate.get("tags", []) if item}
@@ -2186,6 +2268,9 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
     if any(token in context_lower for token in ("몽환", "감성", "잔잔", "위로")) and candidate_tags & {"dreamy", "soft", "emotional", "calm"}:
         score += 3
 
+    if _track_history_key(candidate_name, candidate_artist) in (recent_track_keys or set()):
+        score -= 36
+
     seed = f"{mood}|{context_text or ''}|{candidate_name}|{candidate_artist}"
     score += int(hashlib.sha256(seed.encode("utf-8")).hexdigest()[:4], 16) % 7
     return score
@@ -2196,6 +2281,7 @@ def _select_fallback_catalog(
     context_text: str | None,
     limit: int,
     selection_guidance: dict[str, Any] | None = None,
+    recent_track_keys: set[str] | None = None,
 ) -> list[dict[str, object]]:
     catalog = FALLBACK_LIBRARY
     constraints = extract_hard_constraints(context_text)
@@ -2338,7 +2424,7 @@ def _select_fallback_catalog(
     ranked = sorted(
         catalog,
         key=lambda candidate: (
-            -_score_fallback_candidate(candidate, mood, context_text),
+            -_score_fallback_candidate(candidate, mood, context_text, recent_track_keys),
             str(candidate.get("name") or ""),
         ),
     )
@@ -2349,13 +2435,23 @@ def _select_fallback_catalog(
     diversify_family_trip = _is_family_trip_request(context_text)
     diversify_korean_band_rock = _prefers_korean_band_rock(context_text)
     diversify_focus_genres = _is_long_focus_request(context_text) and not explicit_genre_set
+    diversify_categories = not explicit_genre_set and not diversify_family_trip and not diversify_korean_band_rock
     focus_genre_counts: dict[str, int] = {}
-    for candidate in ranked:
+    candidate_pool = ranked[: max(limit * 3, limit)]
+    category_counts: dict[str, int] = {}
+    for candidate in candidate_pool:
         key = (str(candidate.get("name") or ""), str(candidate.get("artist_name") or ""))
         if key in seen:
             continue
         artist_key = str(candidate.get("artist_name") or "").strip().lower()
-        if (diversify_family_trip or diversify_korean_band_rock) and artist_key in seen_artists:
+        if artist_key in seen_artists and not explicit_genre_set:
+            continue
+        candidate_tags = {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+        category = next(
+            (value for value in ("jazz", "classical", "ambient", "electronic", "rnb", "rock", "jpop", "pop", "hip-hop") if value in candidate_tags),
+            "other",
+        )
+        if diversify_categories and category_counts.get(category, 0) >= 2 and len(unique) < limit - 1:
             continue
         if diversify_focus_genres:
             candidate_tags = {str(tag).lower() for tag in candidate.get("tags", []) if tag}
@@ -2378,8 +2474,10 @@ def _select_fallback_catalog(
         seen.add(key)
         seen_artists.add(artist_key)
         selected_candidate = dict(candidate)
-        selected_candidate["final_ranking_score"] = _score_fallback_candidate(candidate, mood, context_text)
+        selected_candidate["final_ranking_score"] = _score_fallback_candidate(candidate, mood, context_text, recent_track_keys)
+        selected_candidate["selection_category"] = category
         unique.append(selected_candidate)
+        category_counts[category] = category_counts.get(category, 0) + 1
         if diversify_focus_genres:
             focus_genre_counts[candidate_genre] = focus_genre_counts.get(candidate_genre, 0) + 1
         generation_counts[generation] = generation_counts.get(generation, 0) + 1
@@ -2394,6 +2492,7 @@ def _fallback_tracks(
     context_text: str | None = None,
     limit: int = FALLBACK_LIMIT,
     selection_guidance: dict[str, Any] | None = None,
+    recent_track_keys: set[str] | None = None,
 ) -> list[TrackSummary]:
     constraints = extract_hard_constraints(context_text)
     # Album art is a display enhancement, never a reason to replace a more
@@ -2405,8 +2504,11 @@ def _fallback_tracks(
             or _prefers_korean_band_rock(context_text)
         )
     )
-    catalog_limit = len(FALLBACK_LIBRARY) if cover_can_expand_candidates else limit
-    catalog = _select_fallback_catalog(mood, context_text, catalog_limit, selection_guidance)
+    # Soft RAG guidance ranks the catalog; it must not shrink the candidate
+    # pool below the requested count. Hard constraints are still applied by
+    # _select_fallback_catalog and validate_hard_constraints.
+    catalog_limit = len(FALLBACK_LIBRARY) if (not access_token or cover_can_expand_candidates) else limit
+    catalog = _select_fallback_catalog(mood, context_text, catalog_limit, selection_guidance, recent_track_keys)
     if not access_token:
         tracks = [
             TrackSummary(
@@ -2415,7 +2517,7 @@ def _fallback_tracks(
                 artist_name=str(item["artist_name"]),
                 display_title=str(item["name"]),
                 spotify_search_title=_spotify_search_title(str(item["name"]), str(item["artist_name"])),
-                reason_facts=_build_candidate_reason_facts(item, context_text, mood),
+                reason_facts=_build_candidate_reason_facts(item, context_text, mood, recent_track_keys),
                 reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                 spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
             )
@@ -2452,7 +2554,7 @@ def _fallback_tracks(
                         "recording_match_confidence": track.recording_match_confidence,
                         "instrumentation_source": track.instrumentation_source,
                         "reason_facts": _attach_spotify_recording_facts(
-                            _build_contextual_reason_facts(display_name, display_artist, context_text),
+                            _build_candidate_reason_facts(item, context_text, mood, recent_track_keys),
                             track,
                         ),
                     }
@@ -2474,7 +2576,7 @@ def _fallback_tracks(
                     artist_name=str(item["artist_name"]),
                     display_title=str(item["name"]),
                     spotify_search_title=_spotify_search_title(str(item["name"]), str(item["artist_name"])),
-                    reason_facts=_build_candidate_reason_facts(item, context_text, mood),
+                    reason_facts=_build_candidate_reason_facts(item, context_text, mood, recent_track_keys),
                     reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                     spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
                 )
@@ -2488,7 +2590,7 @@ def _fallback_tracks(
                 artist_name=str(item["artist_name"]),
                 display_title=str(item["name"]),
                 spotify_search_title=_spotify_search_title(str(item["name"]), str(item["artist_name"])),
-                reason_facts=_build_candidate_reason_facts(item, context_text, mood),
+                reason_facts=_build_candidate_reason_facts(item, context_text, mood, recent_track_keys),
                 reason=str(item.get("reason") or "지금 분위기에 맞게 골라본 곡이에요."),
                 spotify_url=_build_spotify_search_url(str(item["name"]), str(item["artist_name"])),
             )
@@ -2510,6 +2612,7 @@ def ensure_recommendation_count(
     access_token: str | None,
     target: int = FALLBACK_LIMIT,
     selection_guidance: dict[str, Any] | None = None,
+    recent_track_keys: set[str] | None = None,
 ) -> list[TrackSummary]:
     """Refill only with newly validated ranked candidates; never drop valid tracks for bad copy."""
     valid = validate_hard_constraints(tracks, context_text)
@@ -2521,16 +2624,36 @@ def ensure_recommendation_count(
         context_text=context_text,
         limit=target,
         selection_guidance=selection_guidance,
+        recent_track_keys=recent_track_keys,
     )
     seen = {(track.name.strip().lower(), track.artist_name.strip().lower()) for track in valid}
-    for candidate in validate_hard_constraints(fallback, context_text):
-        key = (candidate.name.strip().lower(), candidate.artist_name.strip().lower())
-        if key in seen:
-            continue
-        valid.append(candidate)
-        seen.add(key)
-        if len(valid) >= target:
-            break
+
+    def append_candidates(candidates: list[TrackSummary]) -> None:
+        for candidate in validate_hard_constraints(candidates, context_text):
+            key = (candidate.name.strip().lower(), candidate.artist_name.strip().lower())
+            if key in seen:
+                continue
+            valid.append(candidate)
+            seen.add(key)
+            if len(valid) >= target:
+                break
+
+    append_candidates(fallback)
+    if len(valid) < target:
+        # RAG guidance can narrow a soft-preference pool below six tracks. For
+        # refill only, widen that soft pool while preserving hard constraints.
+        append_candidates(
+            _fallback_tracks(
+                mood,
+                access_token=None,
+                context_text=context_text,
+                limit=target,
+                selection_guidance=None,
+                recent_track_keys=recent_track_keys,
+            )
+        )
+    if len(valid) < target:
+        return valid[:target]
     return valid[:target]
 
 
@@ -2540,6 +2663,7 @@ def recommend_tracks(
     limit: int = 6,
     context_text: str | None = None,
     selection_guidance: dict[str, Any] | None = None,
+    recent_track_keys: set[str] | None = None,
 ) -> list[TrackSummary]:
     normalized_mood = _normalize_mood(mood)
     constraints = extract_hard_constraints(context_text)
@@ -2556,6 +2680,7 @@ def recommend_tracks(
             context_text=context_text,
             limit=limit,
             selection_guidance=selection_guidance,
+            recent_track_keys=recent_track_keys,
         )
 
     if constraints["instrumental_required"]:
@@ -2567,6 +2692,7 @@ def recommend_tracks(
             context_text=context_text,
             limit=limit,
             selection_guidance=selection_guidance,
+            recent_track_keys=recent_track_keys,
         )
 
     if not access_token:
@@ -2578,6 +2704,7 @@ def recommend_tracks(
             context_text=context_text,
             limit=limit,
             selection_guidance=selection_guidance,
+            recent_track_keys=recent_track_keys,
         )
 
     try:
@@ -2615,10 +2742,12 @@ def recommend_tracks(
                 seen_pairs.add(key)
                 curated_tracks.append(track)
                 if len(curated_tracks) >= limit:
-                    return _enforce_korean_band_rock_selection(curated_tracks, context_text, limit)
+                    selected = _select_diverse_track_summaries(curated_tracks, limit, recent_track_keys)
+                    return _enforce_korean_band_rock_selection(selected, context_text, limit)
 
         if len(curated_tracks) >= limit:
-            return _enforce_korean_band_rock_selection(curated_tracks, context_text, limit)
+            selected = _select_diverse_track_summaries(curated_tracks, limit, recent_track_keys)
+            return _enforce_korean_band_rock_selection(selected, context_text, limit)
 
         response = _spotify_request(SPOTIFY_RECOMMENDATIONS_URL, access_token, params=query)
         tracks = response.get("tracks") or []
@@ -2641,6 +2770,7 @@ def recommend_tracks(
                     context_text=context_text,
                     limit=limit,
                     selection_guidance=selection_guidance,
+                    recent_track_keys=recent_track_keys,
                 )
                 for filler in filler_tracks:
                     key = (filler.name, filler.artist_name)
@@ -2650,10 +2780,11 @@ def recommend_tracks(
                     unique_tracks.append(filler)
                     if len(unique_tracks) >= limit:
                         break
-            return _enforce_korean_band_rock_selection(unique_tracks, context_text, limit)
+            selected = _select_diverse_track_summaries(unique_tracks, limit, recent_track_keys)
+            return _enforce_korean_band_rock_selection(selected, context_text, limit)
     except SpotifyRecommendationError:
-        return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance)
+        return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance, recent_track_keys=recent_track_keys)
     except Exception:
-        return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance)
+        return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance, recent_track_keys=recent_track_keys)
 
-    return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance)
+    return _fallback_tracks(normalized_mood, access_token=access_token, context_text=context_text, limit=limit, selection_guidance=selection_guidance, recent_track_keys=recent_track_keys)

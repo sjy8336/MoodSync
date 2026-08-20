@@ -41,6 +41,7 @@ from app.services.spotify_service import (
     build_recommendation_message,
     build_track_reason,
     ensure_recommendation_count,
+    _track_history_key,
     recommend_tracks,
     validate_hard_constraints,
 )
@@ -66,6 +67,7 @@ class RecommendationWorkflowState(TypedDict, total=False):
     preference_context: str | None
     recent_mood_summary: str | None
     recent_recommendation_summary: str | None
+    recent_track_keys: set[str]
     mood: str
     rag_context: str | None
     selection_guidance: dict[str, Any]
@@ -561,6 +563,12 @@ def _prepare_context(state: RecommendationWorkflowState) -> dict[str, Any]:
     recent_recommendations = get_recent_recommendations(db, user.id, limit=3)
     recent_mood_summary = _summarize_recent_moods(recent_moods)
     recent_recommendation_summary = _summarize_recent_recommendations(recent_recommendations)
+    recent_track_keys = {
+        _track_history_key(track.get("name"), track.get("artist_name"))
+        for recommendation in recent_recommendations
+        for track in (getattr(recommendation, "tracks", []) or [])
+        if isinstance(track, dict) and track.get("name") and track.get("artist_name")
+    }
     return {
         "free_text": free_text,
         "selected_vibes": selected_vibes,
@@ -568,6 +576,7 @@ def _prepare_context(state: RecommendationWorkflowState) -> dict[str, Any]:
         "preference_context": preference_context,
         "recent_mood_summary": recent_mood_summary,
         "recent_recommendation_summary": recent_recommendation_summary,
+        "recent_track_keys": recent_track_keys,
     }
 
 
@@ -642,6 +651,7 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
         access_token=access_token or None,
         context_text=state["payload"].text,
         selection_guidance=state.get("selection_guidance"),
+        recent_track_keys=state.get("recent_track_keys") or set(),
     )
     retrieved_candidate_count = len(tracks)
     ranked_candidate_count = len(tracks)
@@ -658,9 +668,19 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
         access_token or None,
         target=6,
         selection_guidance=state.get("selection_guidance"),
+        recent_track_keys=state.get("recent_track_keys") or set(),
     )
     korean_band_rock_preference = _korean_band_rock_preference_strength(state["payload"].text)
     exact_korean_band_rock_tracks = [track for track in tracks if _is_korean_band_rock_track(track)]
+    recent_track_keys = state.get("recent_track_keys") or set()
+    recent_overlap_count = sum(
+        _track_history_key(track.name, track.artist_name) in recent_track_keys for track in tracks
+    )
+    selected_categories = [
+        (track.reason_facts or {}).get("selection_category")
+        for track in tracks
+        if (track.reason_facts or {}).get("selection_category")
+    ]
     return {
         "access_token": access_token,
         "tracks": tracks,
@@ -671,6 +691,10 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
             "non_matching_track_count": len(tracks) - len(exact_korean_band_rock_tracks),
             "selected_track_titles": [track.display_title or track.name for track in tracks],
             "target_count": 6,
+            "recent_track_count": len(recent_track_keys),
+            "recent_overlap_count": recent_overlap_count,
+            "diversity_candidate_pool_multiplier": 3,
+            "selected_categories": selected_categories,
             "retrieved_candidate_count": retrieved_candidate_count,
             "ranked_candidate_count": ranked_candidate_count,
             "selected_tracks_before_validation_count": selected_count_before_validation,

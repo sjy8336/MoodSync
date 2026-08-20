@@ -31,6 +31,7 @@ from app.services.spotify_service import (
     _search_track,
     _korean_band_rock_preference_strength,
     _select_fallback_catalog,
+    _track_history_key,
     build_selection_debug,
     build_recommendation_message,
     build_track_reason,
@@ -42,6 +43,29 @@ from app.services.spotify_service import (
 
 
 class GeminiRecommendationCopyTests(unittest.TestCase):
+    def test_fallback_selection_spreads_categories_within_ranked_pool(self) -> None:
+        catalog = _select_fallback_catalog(
+            "focused",
+            "여러 장르를 섞되 너무 산만하지 않은 집중 음악이 필요해요.",
+            6,
+        )
+        categories = {str(item.get("selection_category")) for item in catalog}
+
+        self.assertEqual(len(catalog), 6)
+        self.assertGreaterEqual(len(categories), 3)
+
+    def test_recent_tracks_receive_a_selection_penalty(self) -> None:
+        recent = {_track_history_key("Take Five", "The Dave Brubeck Quartet")}
+        catalog = _select_fallback_catalog(
+            "focused",
+            "집중할 때 듣기 좋은 음악을 추천해줘.",
+            6,
+            recent_track_keys=recent,
+        )
+
+        self.assertEqual(len(catalog), 6)
+        self.assertNotEqual(catalog[0]["name"], "Take Five")
+
     def test_focus_request_resets_genre_and_does_not_reuse_jazz_pool(self) -> None:
         text = (
             "오늘은 노트북 앞에서 오래 앉아 있을 예정이라, 너무 산만하지 않고 "
