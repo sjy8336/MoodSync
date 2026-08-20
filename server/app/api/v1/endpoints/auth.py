@@ -26,6 +26,7 @@ from app.services.spotify_oauth import (
     exchange_code_for_token,
     fetch_spotify_profile,
 )
+from app.services.demo_service import seed_demo_user_content
 from app.services.user_service import get_or_create_demo_user, serialize_spotify_user, upsert_spotify_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -53,11 +54,13 @@ def demo_start(
     payload: DemoLoginRequest | None = None,
     db: Session = Depends(get_db),
 ) -> JSONResponse:
-    demo_user = get_or_create_demo_user(db, preset=payload.preset if payload else None)
+    preset = payload.preset if payload else None
+    demo_user = get_or_create_demo_user(db, preset=preset)
+    seed_demo_user_content(db, demo_user.id, preset=preset)
     response = JSONResponse(
         content=DemoLoginResponse(
             message="Demo session started",
-            preset=payload.preset if payload else None,
+            preset=preset,
             user=serialize_spotify_user(demo_user),
         ).model_dump()
     )

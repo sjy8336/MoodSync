@@ -248,10 +248,12 @@ export default function Header() {
 
     const location = useLocation();
     const navigate = useNavigate();
+    const { user } = useAuth();
 
     const routeKey = Object.keys(ROUTE_CONFIG).find((k) => location.pathname === k) || '/home';
     const config = ROUTE_CONFIG[routeKey] || ROUTE_CONFIG['/home'];
     const isAppPage = !['/', '/login'].includes(location.pathname);
+    const isDemoUser = user?.auth_provider === 'demo';
 
     useEffect(() => {
         const fn = () => setScrolled(window.scrollY > 8);
@@ -340,12 +342,30 @@ export default function Header() {
                 ) : null;
             }
 
-            return <ProfileMenu size={38} iconSize={18} />;
+            return (
+                <div className="flex items-center gap-2">
+                    {isDemoUser && (
+                        <span className="inline-flex items-center rounded-full border border-[#C7C9FA] bg-[#ECEDFD] px-3 py-[7px] text-[12px] font-bold text-[#4B4FD0]">
+                            DEMO
+                        </span>
+                    )}
+                    <ProfileMenu size={38} iconSize={18} />
+                </div>
+            );
         }
 
         if (isTablet) {
             if (isAppPage) {
-                return <ProfileMenu size={36} iconSize={17} />;
+                return (
+                    <div className="flex items-center gap-2">
+                        {isDemoUser && (
+                            <span className="inline-flex items-center rounded-full border border-[#C7C9FA] bg-[#ECEDFD] px-3 py-[7px] text-[11px] font-bold text-[#4B4FD0]">
+                                DEMO
+                            </span>
+                        )}
+                        <ProfileMenu size={36} iconSize={17} />
+                    </div>
+                );
             }
 
             return config.showLoginButton ? (
@@ -360,7 +380,16 @@ export default function Header() {
 
         if (isMobile) {
             if (config.showProfileButton) {
-                return <ProfileMenu size={36} iconSize={16} />;
+                return (
+                    <div className="flex items-center gap-2">
+                        {isDemoUser && (
+                            <span className="inline-flex items-center rounded-full border border-[#C7C9FA] bg-[#ECEDFD] px-2.5 py-[6px] text-[10px] font-bold text-[#4B4FD0]">
+                                DEMO
+                            </span>
+                        )}
+                        <ProfileMenu size={36} iconSize={16} />
+                    </div>
+                );
             }
 
             if (config.showLoginButton) {

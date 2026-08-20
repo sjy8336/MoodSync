@@ -652,6 +652,14 @@ export default function HomePage() {
         user?.providerUserId ||
         user?.provider_user_id ||
         'Spotify 사용자';
+    const isDemoUser = user?.auth_provider === 'demo';
+    const demoPresetKey = (user?.providerUserId || user?.provider_user_id || '').split(':')[1] || 'focus';
+    const demoPresetLabel = {
+        focus: '집중 테스트',
+        jazz: '재즈 테스트',
+        calm: '밤공기 테스트',
+        emotional: '감성 테스트',
+    }[demoPresetKey] || '데모';
 
     const todayMood = summaryLoaded
         ? buildTodayMoodCard(summary?.today_mood, summary?.latest_recommendation)
@@ -764,6 +772,23 @@ export default function HomePage() {
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_328px] gap-8 md:gap-10 items-start">
 
                         <div>
+                            {isDemoUser && (
+                                <div className="ms-fu mb-5 rounded-[22px] border border-[#C7C9FA] bg-[#F2F3FF] px-4 py-4 shadow-[0_10px_30px_-18px_rgba(123,127,240,0.5)] [animation-delay:0.03s]">
+                                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                                        <span className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[6px] text-[12px] font-bold text-white">
+                                            DEMO
+                                        </span>
+                                        <span className="text-[12.5px] font-semibold text-[#4B4FD0]">
+                                            {demoPresetLabel}
+                                        </span>
+                                    </div>
+                                    <p className="text-[13.5px] leading-[1.7] text-[#4B4FD0] m-0">
+                                        샘플 감정 기록, 추천 음악, 좋아요 데이터가 미리 채워져 있어요.
+                                        <br />
+                                        감정 기록하기를 눌러 실제 추천 흐름도 바로 테스트해보세요.
+                                    </p>
+                                </div>
+                            )}
 
                             <div className="ms-fu inline-flex items-center gap-[6px] text-[12px] font-semibold text-[#6E6678] bg-white border border-[#E5DFD3] rounded-full px-[12px] py-[5px] mb-6 shadow-[0_2px_8px_rgba(33,28,38,0.05)] [animation-delay:0.05s]">
                                 <Ic d={I.clock} size={12} color="#A39CAC" />
