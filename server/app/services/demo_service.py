@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.favorite import Favorite
 from app.models.mood_record import MoodRecord
 from app.models.recommendation import Recommendation
 from app.schemas.track import TrackSummary
+
+
+DEMO_CONTENT_VERSION = 3
 
 
 def _demo_tracks(preset: str) -> list[TrackSummary]:
@@ -156,7 +159,7 @@ def _demo_favorite_tracks(preset: str) -> list[dict[str, object]]:
             "album_image_url": track.album_image_url,
             "spotify_url": track.spotify_url,
             "duration_ms": track.duration_ms,
-            "mood": "focused" if preset == "focus" else "excited",
+            "mood": "focused" if preset == "focus" else "tired" if preset == "jazz" else "calm" if preset == "dreamy" else "excited",
             "reason": track.reason,
             "is_favorite": True,
         }
@@ -167,8 +170,19 @@ def _demo_favorite_tracks(preset: str) -> list[dict[str, object]]:
 def seed_demo_user_content(db: Session, user_id: int, preset: str | None = None) -> None:
     preset_key = (preset or "focus").strip().lower() or "focus"
     existing_record = db.scalar(select(MoodRecord.id).where(MoodRecord.user_id == user_id).limit(1))
-    if existing_record is not None:
+    existing_profile = db.scalar(
+        select(Recommendation.generation_profile)
+        .where(Recommendation.user_id == user_id)
+        .order_by(Recommendation.created_at.desc())
+        .limit(1)
+    )
+    if existing_record is not None and isinstance(existing_profile, dict) and existing_profile.get("demo_content_version") == DEMO_CONTENT_VERSION:
         return
+    if existing_record is not None:
+        db.execute(delete(Favorite).where(Favorite.user_id == user_id))
+        db.execute(delete(Recommendation).where(Recommendation.user_id == user_id))
+        db.execute(delete(MoodRecord).where(MoodRecord.user_id == user_id))
+        db.commit()
 
     now = datetime.now(timezone.utc)
     mood_sequences = {
@@ -178,9 +192,9 @@ def seed_demo_user_content(db: Session, user_id: int, preset: str | None = None)
             ("focused", "데모 테스트: 재즈와 로파이가 같이 반응하는지 보고 있어요.", 2),
         ],
         "jazz": [
-            ("focused", "데모 테스트: 스윙 재즈 반응 확인 중이에요.", 0),
-            ("calm", "데모 테스트: 보사노바와 쿨 재즈가 부드럽게 이어지는지 확인해요.", 1),
-            ("excited", "데모 테스트: 퓨전 재즈까지 잘 분리되는지 보고 있어요.", 2),
+            ("tired", "데모 테스트: 지친 상태에 어울리는 재즈 반응을 확인 중이에요.", 0),
+            ("calm", "데모 테스트: 피아노와 쿨 재즈가 긴장을 풀어주는지 확인해요.", 1),
+            ("tired", "데모 테스트: 과하지 않은 재즈의 피로 완화 흐름을 보고 있어요.", 2),
         ],
         "drive": [
             ("excited", "데모 테스트: 드라이브용 업템포 추천을 확인 중이에요.", 0),
@@ -188,9 +202,9 @@ def seed_demo_user_content(db: Session, user_id: int, preset: str | None = None)
             ("excited", "데모 테스트: 펑크와 신스팝의 에너지가 유지되는지 봐요.", 2),
         ],
         "dreamy": [
-            ("excited", "데모 테스트: 몽환적인 신스 사운드 반응을 확인 중이에요.", 0),
+            ("calm", "데모 테스트: 몽환적인 신스 사운드 반응을 확인 중이에요.", 0),
             ("calm", "데모 테스트: 공간감 있는 곡의 분위기를 확인해요.", 1),
-            ("excited", "데모 테스트: 드림 팝의 몰입감이 이어지는지 봐요.", 2),
+            ("calm", "데모 테스트: 드림 팝의 몰입감이 이어지는지 봐요.", 2),
         ],
     }
 
@@ -213,7 +227,7 @@ def seed_demo_user_content(db: Session, user_id: int, preset: str | None = None)
         "dreamy": "몽환 테스트용 데모 추천이에요. 드림 팝과 신스 중심으로 공간감 있게 구성했어요.",
     }
     recommendation_context = {
-        "selected_mood": "focused" if preset_key == "focus" else "excited",
+        "selected_mood": "focused" if preset_key == "focus" else "tired" if preset_key == "jazz" else "calm" if preset_key == "dreamy" else "excited",
         "user_text": f"{preset_key} 데모 시나리오",
         "selected_vibes": ["데모"],
         "favorite_context": "데모 전용 샘플 데이터",
@@ -222,7 +236,7 @@ def seed_demo_user_content(db: Session, user_id: int, preset: str | None = None)
         "rag_context": "데모 지식 베이스: 실제 입력 없이도 흐름을 확인할 수 있어요.",
     }
 
-    for idx, created_days_ago in enumerate([0, 1]):
+    for idx, created_days_ago in enumerate([0, 1, 2]):
         db.add(
             Recommendation(
                 user_id=user_id,
@@ -236,6 +250,7 @@ def seed_demo_user_content(db: Session, user_id: int, preset: str | None = None)
                 generation_profile={
                     "llm_provider": "gemini",
                     "demo_mode": True,
+                    "demo_content_version": DEMO_CONTENT_VERSION,
                     "scenario": preset_key,
                     "track_count": len(demo_tracks),
                     "reason_source": "demo",

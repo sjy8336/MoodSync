@@ -105,6 +105,7 @@ const MOOD_OPTIONS = [
     { value: 'excited', label: '설렘', icon: I.star, family: 'amber' },
     { value: 'sad', label: '우울', icon: I.rain, family: 'lavender' },
     { value: 'lonely', label: '외로움', icon: I.droplets, family: 'lavender' },
+    { value: 'calm', label: '평온', icon: I.cloud, family: 'lavender' },
     { value: 'tired', label: '피로', icon: I.sofa, family: 'lavender' },
     { value: 'angry', label: '분노', icon: I.flame, family: 'coral' },
     { value: 'anxious', label: '불안', icon: I.alertC, family: 'lavender' },
@@ -116,6 +117,10 @@ const VIBE_OPTIONS = [
     { value: '신나는', icon: I.zap },
     { value: '따뜻한', icon: I.sun },
     { value: '몽환적인', icon: I.moon },
+    { value: '공간감 있는', icon: I.cloud },
+    { value: '그루브 있는', icon: I.music },
+    { value: '리드미컬한', icon: I.zap },
+    { value: '신비로운', icon: I.sparkles },
     { value: '감성적인', icon: I.heart },
     { value: '강렬한', icon: I.flame },
     { value: '차분한', icon: I.cloud },
@@ -133,9 +138,9 @@ const DEMO_QUICK_FILL = {
     },
     jazz: {
         title: '재즈 예시',
-        mood: 'excited',
-        text: '퇴근하고 나서 기분 전환할 겸 재즈를 듣고 싶어요. 스윙처럼 살아있는 에너지가 있되, 너무 과하지 않고 세련된 분위기였으면 해요.',
-        vibes: ['신나는', '감성적인', '기분 전환되는'],
+        mood: 'tired',
+        text: '오늘은 조금 지쳐서 재즈를 듣고 싶어요. 너무 자극적이지 않고, 피아노와 색소폰이 천천히 흐르면서 긴장을 풀어주는 곡이면 좋겠어요.',
+        vibes: ['차분한', '감성적인', '위로되는'],
     },
     drive: {
         title: '드라이브 예시',
@@ -145,7 +150,7 @@ const DEMO_QUICK_FILL = {
     },
     dreamy: {
         title: '몽환 예시',
-        mood: 'excited',
+        mood: 'calm',
         text: '현실에서 잠깐 벗어난 듯한 음악을 듣고 싶어요. 드림 팝과 신스가 어우러지고, 잔잔하기만 하기보다는 공간감과 몰입감이 느껴지는 곡이 필요해요.',
         vibes: ['몽환적인', '감성적인', '몰입되는'],
     },
@@ -166,12 +171,13 @@ export default function MoodInputPage() {
     const demoAutofillRef = useRef(false);
     const isDemoUser = user?.auth_provider === 'demo';
     const demoPresetKey = (user?.providerUserId || user?.provider_user_id || '').split(':')[1] || 'focus';
+    const [selectedDemoPresetKey, setSelectedDemoPresetKey] = useState(demoPresetKey);
     const demoPresetLabel = {
         focus: '집중 테스트',
         jazz: '재즈 테스트',
         drive: '드라이브 테스트',
         dreamy: '몽환 테스트',
-    }[demoPresetKey] || '데모';
+    }[selectedDemoPresetKey] || '데모';
 
     useEffect(() => {
         const check = () => setIsMobile(window.innerWidth < 560);
@@ -255,6 +261,7 @@ export default function MoodInputPage() {
     const applyDemoScenario = (key) => {
         if (loading) return;
         const scenario = DEMO_QUICK_FILL[key] || DEMO_QUICK_FILL.focus;
+        setSelectedDemoPresetKey(key);
         demoAutofillRef.current = true;
         setMood(scenario.mood);
         setText(scenario.text);
@@ -320,13 +327,13 @@ export default function MoodInputPage() {
                                         </p>
                                     </div>
                                     <span className="text-[11.5px] font-semibold text-[#4B4FD0]">
-                                        현재 데모 프리셋: {demoPresetKey}
+                                        현재 데모 프리셋: {selectedDemoPresetKey}
                                     </span>
                                 </div>
 
                                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                                     {Object.entries(DEMO_QUICK_FILL).map(([key, scenario]) => {
-                                        const active = demoPresetKey === key;
+                                        const active = selectedDemoPresetKey === key;
                                         return (
                                             <button
                                                 key={key}

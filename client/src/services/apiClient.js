@@ -181,6 +181,13 @@ export function getMoodHistory({ year, month } = {}) {
     });
 }
 
+export function deleteMoodHistory(recordId, recommendationId) {
+    const params = recommendationId ? `?recommendation_id=${encodeURIComponent(recommendationId)}` : '';
+    return request(`${ENDPOINTS.moodHistory}/${encodeURIComponent(recordId)}${params}`, {
+        method: 'DELETE',
+    });
+}
+
 export function getFavorites() {
     return request(ENDPOINTS.favorites, {
         method: 'GET',

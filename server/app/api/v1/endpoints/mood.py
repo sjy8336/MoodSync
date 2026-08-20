@@ -1,5 +1,6 @@
 from datetime import datetime
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -17,6 +18,8 @@ from app.services.mood_service import (
     get_today_mood_record,
 )
 from app.services.mood_service import serialize_mood_record, serialize_recommendation
+from app.models.mood_record import MoodRecord
+from app.models.recommendation import Recommendation
 
 router = APIRouter(prefix="/mood", tags=["mood"])
 
@@ -76,28 +79,25 @@ def get_mood_history(
     mood_records = get_month_mood_records(db, user.id, target_year, target_month)
     recommendations = get_month_recommendations(db, user.id, target_year, target_month)
 
-    recommendations_by_date: dict[str, object] = {}
+    recommendations_by_date: dict[str, list[Recommendation]] = {}
     for recommendation in recommendations:
         date_key = recommendation.created_at.date().isoformat()
-        if date_key not in recommendations_by_date:
-            recommendations_by_date[date_key] = recommendation
+        recommendations_by_date.setdefault(date_key, []).append(recommendation)
 
     mood_counts: dict[str, int] = {}
-    seen_dates: set[str] = set()
     records: list[dict] = []
 
     for mood_record in mood_records:
         date_key = mood_record.created_at.date().isoformat()
-        if date_key in seen_dates:
-            continue
-        seen_dates.add(date_key)
-
         mood_counts[mood_record.mood] = mood_counts.get(mood_record.mood, 0) + 1
-        recommendation = recommendations_by_date.get(date_key)
+        date_recommendations = recommendations_by_date.get(date_key, [])
+        recommendation = date_recommendations.pop(0) if date_recommendations else None
         recommendation_query = getattr(recommendation, "query", None)
         selected_vibes = list(getattr(recommendation, "selected_vibes", None) or [])
         records.append(
             {
+                "record_id": mood_record.id,
+                "recommendation_id": recommendation.id if recommendation else None,
                 "date": date_key,
                 "mood": mood_record.mood,
                 "text": recommendation_query or mood_record.text,
@@ -122,3 +122,29 @@ def get_mood_history(
         },
         "records": records,
     }
+
+
+@router.delete("/history/{record_id}")
+def delete_mood_history(
+    record_id: int,
+    request: Request,
+    recommendation_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    user = resolve_current_spotify_user(request, db)
+    mood_record = db.scalar(
+        select(MoodRecord).where(MoodRecord.id == record_id, MoodRecord.user_id == user.id)
+    )
+    if mood_record is None:
+        raise HTTPException(status_code=404, detail="Mood record not found")
+
+    db.delete(mood_record)
+    if recommendation_id is not None:
+        db.execute(
+            delete(Recommendation).where(
+                Recommendation.id == recommendation_id,
+                Recommendation.user_id == user.id,
+            )
+        )
+    db.commit()
+    return {"message": "Mood history deleted"}

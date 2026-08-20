@@ -516,11 +516,11 @@ export default function FavoritesPage() {
                                         DEMO
                                     </div>
                                     <h2 className="mt-3 text-[18px] font-extrabold tracking-[-0.02em] text-[#211C26]">
-                                        {demoPresetLabel} 좋아요 샘플이 들어 있어요
+                                        {demoPresetLabel}<br />좋아요 샘플이 들어 있어요
                                     </h2>
                                     <p className="mt-1.5 max-w-[620px] text-[13.5px] leading-[1.7] text-[#4B4FD0]">
-                                        좋아요를 눌렀다 취소해보면서 반영 상태를 확인해보세요. 감정별 필터와 검색,
-                                        Spotify 이동까지 실제 흐름으로 테스트할 수 있어요.
+                                        좋아요를 눌렀다 취소해보면서 반영 상태를 확인해보세요. <br/>
+                                        감정별 필터와 검색, Spotify 이동까지 실제 흐름으로 테스트할 수 있어요.
                                     </p>
                                 </div>
 
@@ -586,49 +586,6 @@ export default function FavoritesPage() {
                         <EmptyState />
                     ) : (
                         <>
-
-                            <div className={`fav-fu mb-5 ${getAnimationDelayClass(0.06)}`}>
-                                <div className="grid grid-cols-2 min-[560px]:grid-cols-4 min-[900px]:grid-cols-4 gap-3">
-                                    {Object.entries(
-                                        tracks.reduce((acc, t) => {
-                                            const info = getMoodInfo(t.mood);
-                                            if (!acc[t.mood]) acc[t.mood] = { ...info, count: 0 };
-                                            acc[t.mood].count++;
-                                            return acc;
-                                        }, {})
-                                    )
-                                        .slice(0, 4)
-                                        .map(([key, info]) => (
-                                            <button
-                                                key={key}
-                                                type="button"
-                                                onClick={() => setActiveMood(activeMood === key ? 'all' : key)}
-                                                className={`flex items-center gap-3 px-4 py-3.5 rounded-2xl border text-left transition-all duration-200 cursor-pointer
-                                                ${
-                                                    activeMood === key
-                                                        ? 'border-[#D6CFC1] shadow-[0_4px_16px_-6px_rgba(33,28,38,0.12)] -translate-y-0.5'
-                                                        : 'border-[#E5DFD3] hover:border-[#D6CFC1]'
-                                                }`}
-                                                className={`${activeMood === key ? getSoftBgClass(info.soft) : 'bg-white'}`}
-                                            >
-                                                <div
-                                                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${activeMood === key ? 'bg-white' : getSoftBgClass(info.soft)}`}
-                                                >
-                                                    <Ic d={info.icon} size={16} color={info.color} />
-                                                </div>
-                                                <div>
-                                                    <p className="text-[13px] font-bold text-[#211C26] leading-tight">
-                                                        {info.label}
-                                                    </p>
-                                                    <p className="text-[11px] text-[#A39CAC] mt-[1px]">
-                                                        {info.count}곡
-                                                    </p>
-                                                </div>
-                                            </button>
-                                        ))}
-                                </div>
-                            </div>
-
 
                             <div className={`fav-fu flex flex-wrap items-center gap-2.5 mb-5 ${getAnimationDelayClass(0.09)}`}>
                                 <div className="flex items-center gap-1.5 flex-wrap flex-1">

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import FavoriteToast from '../components/FavoriteToast';
-import { getMoodHistory, getFavorites, saveFavorite, removeFavorite } from '../services/apiClient';
+import { getMoodHistory, deleteMoodHistory, getFavorites, saveFavorite, removeFavorite } from '../services/apiClient';
 import { useAuth } from '../contexts/AuthContext';
 
 
@@ -103,6 +103,7 @@ const MOOD_MAP = {
     excited: { label: '설렘', color: '#FFB648', soft: '#FFF3DE' },
     sad: { label: '우울', color: '#7B7FF0', soft: '#ECEDFD' },
     lonely: { label: '외로움', color: '#7B7FF0', soft: '#ECEDFD' },
+    calm: { label: '평온', color: '#9B8FD4', soft: '#EDEAFC' },
     tired: { label: '피로', color: '#7B7FF0', soft: '#ECEDFD' },
     angry: { label: '분노', color: '#FF6B5E', soft: '#FFEAE6' },
     anxious: { label: '불안', color: '#7B7FF0', soft: '#ECEDFD' },
@@ -1080,9 +1081,18 @@ export default function HistoryPage() {
         setMonth(jumpMonth);
     };
 
-    const handleDeleteRecord = (id) => {
-        setRecords((prev) => prev.filter((r) => r.id !== id));
-        setExpandedId((cur) => (cur === id ? null : cur));
+    const handleDeleteRecord = async (id) => {
+        const record = records.find((item) => item.id === id);
+        try {
+            if (!String(id).startsWith('dummy-')) {
+                await deleteMoodHistory(id, record?.recommendation_id);
+            }
+            setRecords((prev) => prev.filter((r) => r.id !== id));
+            setExpandedId((cur) => (cur === id ? null : cur));
+        } catch (error) {
+            console.error('감정 기록을 삭제하지 못했어요.', error);
+            setLoadError(error.message || '감정 기록을 삭제하지 못했어요.');
+        }
     };
 
     const topMoodTheme = summary.topMood ? getMoodTheme(summary.topMood) : null;
@@ -1136,7 +1146,7 @@ export default function HistoryPage() {
                                         DEMO
                                     </div>
                                     <h2 className="mt-3 text-[18px] font-extrabold tracking-[-0.02em] text-[#211C26]">
-                                        {demoPresetLabel} 기록이 미리 들어 있어요
+                                        {demoPresetLabel}<br />기록이 미리 들어 있어요
                                     </h2>
                                     <p className="mt-1.5 max-w-[620px] text-[13.5px] leading-[1.7] text-[#4B4FD0]">
                                         날짜를 눌러 샘플 감정 흐름과 추천 결과를 바로 확인할 수 있어요. 캘린더,
