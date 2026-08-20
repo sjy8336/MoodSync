@@ -41,6 +41,16 @@ from app.services.spotify_service import (
 
 
 class GeminiRecommendationCopyTests(unittest.TestCase):
+    def test_long_focus_request_does_not_use_break_role_or_study_context(self) -> None:
+        text = (
+            "오늘은 노트북 앞에서 오래 앉아 있을 예정이라, 너무 산만하지 않고 "
+            "몰입이 이어지는 음악이 필요해요. 잔잔하지만 리듬감은 조금 있었으면 좋겠어요."
+        )
+        catalog = _select_fallback_catalog("focused", text, 6)
+        self.assertEqual(len(catalog), 6)
+        self.assertNotIn("Feel It Still", {str(item["name"]) for item in catalog})
+        self.assertNotIn("sleepless in ______", {str(item["name"]) for item in catalog})
+
     def test_explicit_jazz_and_instrument_request_controls_fallback_catalog(self) -> None:
         text = (
             "오늘은 조금 지쳐서 재즈를 듣고 싶어요. 너무 자극적이지 않고, "

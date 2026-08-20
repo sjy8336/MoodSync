@@ -134,7 +134,8 @@ export default function LoginPage() {
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
     const [selectedPreset, setSelectedPreset] = useState(DEMO_PRESETS[0]);
-    const fromPath = location.state?.from || '/home';
+    // Login is the app entry point, so a successful login always starts at home.
+    const fromPath = '/home';
     const hasProtectedRedirect = Boolean(location.state?.from);
 
     useEffect(() => {

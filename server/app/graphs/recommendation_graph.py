@@ -200,6 +200,10 @@ def _uses_unnatural_recommendation_language(reason: str) -> bool:
         "분위기 곡",
         "에너지 곡",
         "대중성 곡",
+        "서로 다른 특징이 함께 느껴지는",
+        "연주곡 · 재즈",
+        "재즈 계열의 리듬, 연주곡",
+        "감정적이지만",
     )
     return any(marker in reason for marker in markers)
 
@@ -207,6 +211,23 @@ def _uses_unnatural_recommendation_language(reason: str) -> bool:
 def _uses_formal_recommendation_style(reason: str) -> bool:
     """Keep recommendation reasons in the app's conversational haeyo체."""
     return any(marker in reason for marker in ("입니다", "습니다", "합니다"))
+
+
+def _has_incomplete_reason_sentence(reason: str) -> bool:
+    cleaned = reason.strip()
+    if not cleaned or not cleaned.endswith((".", "요.", "다.")):
+        return True
+    return any(cleaned.endswith(fragment) for fragment in ("고 싶을", "할 때,", "하며", "하고"))
+
+
+def _leaks_long_focus_context(reason: str, input_text: str) -> bool:
+    lowered = input_text.lower()
+    is_long_focus = any(token in input_text or token in lowered for token in ("오래 앉", "오랫동안", "장시간", "노트북 앞")) and any(
+        token in input_text or token in lowered for token in ("몰입", "집중", "산만하지")
+    )
+    if not is_long_focus:
+        return False
+    return any(marker in reason for marker in ("잠시 쉬어가며", "해야 할 일", "공부 흐름", "집중이 흔들", "페이스를 잡"))
 
 
 def _uses_repetitive_or_abstract_language(reason: str) -> bool:
@@ -438,6 +459,8 @@ def _apply_recommendation_copy(
                 or _uses_disallowed_infinitive_pattern(reason)
                 or _uses_unnatural_recommendation_language(reason)
                 or _uses_formal_recommendation_style(reason)
+                or _has_incomplete_reason_sentence(reason)
+                or _leaks_long_focus_context(reason, input_text)
                 or _uses_repetitive_or_abstract_language(reason)
                 or _repeats_time_clause(reason)
                 or not _has_two_sentence_reason_structure(reason)

@@ -84,6 +84,24 @@ _STUDY_FLOW_ROLES = [
     ("짧은 분위기 환기", "공부 흐름을 크게 바꾸지 않고 분위기를 잠깐 바꾸고 싶을 때"),
 ]
 
+_LONG_FOCUS_ROLES = [
+    ("장시간 틀어두기", "노트북 앞에 오래 앉아 음악을 틀어두고 싶을 때"),
+    ("차분한 흐름 유지", "긴 시간 한 가지 흐름에 머물며 듣고 싶을 때"),
+    ("가벼운 리듬 더하기", "잔잔함을 유지하면서 리듬감을 조금 더하고 싶을 때"),
+    ("낮은 자극으로 배경 유지", "음악이 지나치게 앞에 나서지 않는 분위기를 원할 때"),
+    ("단조로움 줄이기", "차분한 흐름 안에서 작은 리듬 변화를 듣고 싶을 때"),
+    ("긴 청취에 맞추기", "오래 이어 들어도 강한 자극을 피하고 싶을 때"),
+]
+
+_CALM_JAZZ_ROLES = [
+    ("지친 상태에서 차분한 재즈 듣기", "오늘 조금 지친 상태에서 자극적인 음악보다 차분하게 듣고 싶을 때"),
+    ("피아노와 색소폰의 흐름 듣기", "피아노와 색소폰 연주를 천천히 듣고 싶을 때"),
+    ("낮은 강도의 연주 선택", "강한 자극보다 느긋한 재즈를 찾을 때"),
+    ("느긋한 재즈로 쉬기", "긴장이 남아 있어 여유 있는 음악을 듣고 싶을 때"),
+    ("감성적인 연주에 머물기", "감성적인 재즈를 차분하게 듣고 싶은 순간에"),
+    ("재즈의 여백 즐기기", "피아노와 색소폰이 어우러지는 흐름을 부담 없이 듣고 싶을 때"),
+]
+
 _CATHARTIC_KOREAN_ROCK_ROLES = [
     ("답답한 기분 강하게 환기하기", "답답한 기분을 강한 음악으로 환기하고 싶을 때"),
     ("분노의 에너지와 맞추기", "화가 아직 가라앉지 않았을 때 강한 분위기의 음악을 듣고 싶다면"),
@@ -126,6 +144,7 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
     raw_text = text or ""
     lowered = raw_text.lower()
     is_studying = any(token in raw_text or token in lowered for token in ("공부", "과제", "작업", "집중", "몰입"))
+    is_long_focus = any(token in raw_text or token in lowered for token in ("오래 앉", "오랫동안", "장시간", "노트북 앞")) and any(token in raw_text or token in lowered for token in ("몰입", "집중", "산만하지"))
     avoids_overstimulation = any(
         token in raw_text or token in lowered
         for token in ("소란", "시끄", "방해", "과하지", "너무 강", "자극")
@@ -196,6 +215,12 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         context["goal"] = ["새벽의 감성적인 분위기에 머물기", "몽환적이고 감성적인 흐름 이어 듣기"]
         context["avoid"] = ["공부 또는 업무 맥락", "감정을 억지로 바꾸려는 설명", "지나치게 높은 자극"]
         context["priority"] = ["몽환적인 분위기", "감성적인 분위기", "새벽의 고요한 청취 맥락", "사색적인 흐름"]
+    elif is_long_focus:
+        context["context"] = "장시간 이어 듣는 집중 세션"
+        context["current_state"] = ["노트북 앞에 오래 앉아 있을 예정", "장시간 집중이 필요한 상태"]
+        context["goal"] = ["몰입 흐름을 오래 이어가기", "잔잔함 속에 가벼운 리듬감 유지"]
+        context["avoid"] = ["지나치게 높은 자극", "산만하거나 공격적인 분위기", "쉬어가기 중심의 설명"]
+        context["priority"] = ["낮은 자극", "차분한 분위기", "가벼운 리듬감", "장시간 청취 적합성"]
     elif is_studying and is_going_well:
         context["current_state"] = ["이미 집중 흐름이 이어지고 있음", "기분 좋게 몰입 중"]
         context["goal"] = ["현재 공부 흐름 유지", "적당한 활기 유지"]
@@ -555,6 +580,8 @@ def _recommendation_role(
     is_family_trip_context = request_context["context"] == "가족 여행의 차 안"
     is_korean_rock_context = request_context["context"] == "국내 밴드 록 감정 전환"
     is_dawn_sentimental_context = request_context["context"] == "새벽 감성 플레이리스트"
+    is_long_focus_context = request_context["context"] == "장시간 이어 듣는 집중 세션"
+    is_calm_jazz_context = request_context.get("explicit_genre") == "jazz" and bool(request_context.get("instrument_preferences"))
     if is_sleep_context:
         raw_tags = reason_facts.get("tags", []) if isinstance(reason_facts, dict) else []
         tags = {str(tag).strip().lower() for tag in raw_tags if str(tag).strip()}
@@ -575,6 +602,10 @@ def _recommendation_role(
         roles = _CATHARTIC_KOREAN_ROCK_ROLES
     elif is_dawn_sentimental_context:
         roles = _DAWN_SENTIMENTAL_ROLES
+    elif is_long_focus_context:
+        roles = _LONG_FOCUS_ROLES
+    elif is_calm_jazz_context:
+        roles = _CALM_JAZZ_ROLES
     elif has_study_flow:
         roles = _STUDY_FLOW_ROLES
     else:

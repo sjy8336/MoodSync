@@ -260,6 +260,10 @@ def _catalog_metadata_for_track(name: str, artist_name: str) -> dict[str, object
                 "cross_generation_fit": int(candidate.get("cross_generation_fit") or 0),
                 "release_year": int(candidate.get("release_year") or 0),
                 "instrument_source": candidate.get("instrument_source"),
+                "instruments": [
+                    tag for tag in ("piano", "saxophone", "guitar", "trumpet", "violin")
+                    if tag in {str(value).lower() for value in candidate.get("tags", []) if value}
+                ],
             }
     return {}
 
@@ -289,6 +293,22 @@ def extract_instrument_preferences(context_text: str | None) -> dict[str, object
 def _is_sleep_request(context_text: str | None) -> bool:
     lowered = (context_text or "").lower()
     return any(term in lowered for term in SLEEP_REQUEST_TERMS)
+
+
+def _is_long_focus_request(context_text: str | None) -> bool:
+    text = context_text or ""
+    lowered = text.lower()
+    has_long_session = any(token in text or token in lowered for token in ("오래 앉", "오랫동안", "장시간", "long session"))
+    has_focus_goal = any(token in text or token in lowered for token in ("몰입", "집중", "산만하지", "노트북 앞"))
+    return has_long_session and has_focus_goal
+
+
+def _is_calm_jazz_instrument_request(context_text: str | None) -> bool:
+    explicit_genres, _, _ = _extract_genre_family_matches(context_text)
+    preferences = extract_instrument_preferences(context_text)
+    return "jazz" in explicit_genres and bool(preferences.get("instruments")) and any(
+        token in (context_text or "") for token in ("자극", "차분", "지쳐", "피곤", "천천히", "긴장")
+    )
 
 
 def _is_dawn_sentimental_request(context_text: str | None) -> bool:
@@ -331,10 +351,21 @@ def validate_hard_constraints(
     context_text: str | None,
 ) -> list[TrackSummary]:
     """Discard unknown candidates rather than guessing that they meet a hard request."""
+    tracks = [track for track in tracks if _has_valid_track_identity(track)]
     constraints = extract_hard_constraints(context_text)
     if constraints["instrumental_required"]:
         return [track for track in tracks if is_verified_instrumental(track)]
     return tracks
+
+
+def _has_valid_track_identity(track: TrackSummary) -> bool:
+    """Reject placeholder-like titles before they reach ranking or the UI."""
+    title = (track.display_title or track.name or "").strip().lower()
+    if not title or title in {"unknown", "untitled", "null", "none"}:
+        return False
+    if "____" in title or "unknown track" in title:
+        return False
+    return bool((track.track_id or "").strip())
 
 
 def _build_reason_facts(name: str, artist_name: str, seed_genres: list[str] | None = None) -> dict[str, object]:
@@ -457,18 +488,18 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "Lose Yourself", "artist_name": "Eminem", "moods": ["anxious", "focused", "angry"], "tags": ["driving", "focused"]},
     {"name": "Bad Habit", "artist_name": "Steve Lacy", "moods": ["lonely", "sad", "focused"], "tags": ["rnb", "groove"]},
     {"name": "Luv (sic) Part 3", "artist_name": "Nujabes", "moods": ["lonely", "sad", "focused"], "tags": ["emotional", "hip-hop"]},
-    {"name": "Take Five", "artist_name": "The Dave Brubeck Quartet", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
-    {"name": "So What", "artist_name": "Miles Davis", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
-    {"name": "Blue in Green", "artist_name": "Miles Davis", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Take Five", "artist_name": "The Dave Brubeck Quartet", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "rhythmic_strong"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "So What", "artist_name": "Miles Davis", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Blue in Green", "artist_name": "Miles Davis", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Autumn Leaves", "artist_name": "Chet Baker", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "vocal-jazz", "standard"]},
-    {"name": "My Favorite Things", "artist_name": "John Coltrane", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
-    {"name": "Round Midnight", "artist_name": "Thelonious Monk", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "My Favorite Things", "artist_name": "John Coltrane", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Round Midnight", "artist_name": "Thelonious Monk", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Sing, Sing, Sing", "artist_name": "Benny Goodman", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "swing", "big-band", "instrumental"]},
     {"name": "Take the A Train", "artist_name": "Duke Ellington", "moods": ["happy", "focused", "calm"], "tags": ["jazz", "swing", "standard", "big-band"]},
     {"name": "It Don't Mean a Thing", "artist_name": "Duke Ellington", "moods": ["happy", "excited", "focused"], "tags": ["jazz", "swing", "standard", "big-band"]},
     {"name": "Donna Lee", "artist_name": "Charlie Parker", "moods": ["focused", "excited", "angry"], "tags": ["jazz", "bebop", "instrumental"]},
-    {"name": "Moanin'", "artist_name": "Art Blakey & The Jazz Messengers", "moods": ["focused", "calm"], "tags": ["jazz", "hard-bop", "instrumental", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
-    {"name": "Blue Bossa", "artist_name": "Joe Henderson", "moods": ["calm", "focused", "sad"], "tags": ["jazz", "bossa-nova", "latin", "instrumental", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Moanin'", "artist_name": "Art Blakey & The Jazz Messengers", "moods": ["focused", "calm"], "tags": ["jazz", "hard-bop", "instrumental", "piano", "saxophone", "rhythmic_strong"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Blue Bossa", "artist_name": "Joe Henderson", "moods": ["calm", "focused", "sad"], "tags": ["jazz", "bossa-nova", "latin", "instrumental", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
     {"name": "The Girl from Ipanema", "artist_name": "Stan Getz & João Gilberto", "moods": ["calm", "happy", "focused"], "tags": ["bossa-nova", "latin", "acoustic", "vocal-jazz"]},
     {"name": "Birdland", "artist_name": "Weather Report", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "fusion", "instrumental"]},
     {"name": "Spain", "artist_name": "Chick Corea", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "fusion", "instrumental"]},
@@ -1094,6 +1125,8 @@ def build_recommendation_message(
         for token in ("취업", "입사", "면접", "지원서", "자소서", "이력서")
     )
     study_flow_request = any(token in (context_text or "").lower() for token in ("공부", "과제", "작업", "집중", "몰입"))
+    long_focus_request = _is_long_focus_request(context_text)
+    calm_jazz_instrument_request = _is_calm_jazz_instrument_request(context_text)
     avoids_overstimulation = any(token in (context_text or "").lower() for token in ("소란", "시끄", "방해", "과하지", "너무 강", "자극"))
     sleep_request = _is_sleep_request(context_text)
     dawn_sentimental_request = _is_dawn_sentimental_request(context_text)
@@ -1109,8 +1142,33 @@ def build_recommendation_message(
     track_signature = "|".join(track.track_id for track in (tracks or [])[:3])
     base_seed = f"{normalized_mood}|{context_text or ''}|{track_count}|{track_signature}"
 
+    if _is_calm_jazz_instrument_request(context_text):
+        track_facts = [track.reason_facts or {} for track in (tracks or [])]
+        all_jazz = bool(track_facts) and all(
+            "jazz" in {str(tag).lower() for tag in facts.get("tags", []) if tag}
+            for facts in track_facts
+        )
+        piano_sax_count = sum(
+            {"piano", "saxophone"}.issubset(
+                {str(tag).lower() for tag in facts.get("tags", []) if tag}
+            )
+            for facts in track_facts
+        )
+        if all_jazz and piano_sax_count >= max(1, len(track_facts) // 2):
+            return (
+                "오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 골라봤어요. "
+                "피아노와 색소폰이 확인되는 연주곡을 중심으로, 자극이 비교적 적은 분위기를 담았어요."
+            )
+        return "오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 중심으로 골라봤어요."
+
     if study_flow_request and avoids_overstimulation:
         return "지금의 좋은 집중 흐름은 유지하면서도 너무 과하지 않게 활기를 더할 수 있는 곡들을 골라봤어요."
+
+    if long_focus_request:
+        return (
+            "노트북 앞에 오래 앉아 있을 때 부담 없이 이어 듣기 좋은 차분하고 잔잔한 곡들을 골라봤어요. "
+            "너무 단조롭지 않도록 가벼운 리듬감이 느껴지는 곡들도 함께 담았어요."
+        )
 
     if _is_family_trip_request(context_text):
         season_text = "여름" if _current_season() == "summer" else "지금 계절"
@@ -1217,6 +1275,18 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
         "속이 답답할 때 텐션 올리기": "속이 답답할 때 강렬한 록으로 분위기를 바꾸고 싶다면 듣기 좋아요.",
         "밴드 사운드에 몰입하기": "강렬한 밴드 음악에 집중해 듣고 싶을 때 잘 맞아요.",
         "기분을 확 바꾸기": "지금의 기분을 빠르게 전환하고 싶을 때 어울려요.",
+        "장시간 틀어두기": "노트북 앞에 오래 앉아 음악을 틀어두고 싶을 때 듣기 좋아요.",
+        "차분한 흐름 유지": "긴 시간 한 가지 흐름에 머물며 듣고 싶을 때 잘 맞아요.",
+        "가벼운 리듬 더하기": "잔잔함을 유지하면서 리듬감을 조금 더하고 싶을 때 어울려요.",
+        "낮은 자극으로 배경 유지": "음악이 지나치게 앞에 나서지 않는 분위기를 원할 때 듣기 좋아요.",
+        "단조로움 줄이기": "차분한 흐름 안에서 작은 리듬 변화를 듣고 싶을 때 잘 맞아요.",
+        "긴 청취에 맞추기": "오래 이어 들어도 강한 자극을 피하고 싶을 때 어울려요.",
+        "지친 상태에서 차분한 재즈 듣기": "오늘 조금 지친 상태에서 자극적인 음악보다 차분하게 듣고 싶을 때 잘 맞아요.",
+        "피아노와 색소폰의 흐름 듣기": "피아노와 색소폰 연주를 천천히 듣고 싶을 때 잘 어울려요.",
+        "낮은 강도의 연주 선택": "강한 자극보다 느긋한 재즈를 찾을 때 듣기 좋아요.",
+        "느긋한 재즈로 쉬기": "긴장이 남아 있어 여유 있는 음악을 듣고 싶을 때 잘 맞아요.",
+        "감성적인 연주에 머물기": "감성적인 재즈를 차분하게 듣고 싶은 순간에 어울려요.",
+        "재즈의 여백 즐기기": "피아노와 색소폰이 어우러지는 흐름을 부담 없이 듣고 싶을 때 잘 맞아요.",
     }
     family_templates = {
         "여행 출발 전 기분 끌어올리기": "여행을 떠나는 설렘을 그대로 이어가고 싶을 때 듣기 좋아요.",
@@ -1330,6 +1400,40 @@ def _sleep_feature_sentence(track_tags: list[str], track_moods: list[str]) -> st
     return None
 
 
+def _focus_feature_sentence(track_tags: list[str], track_moods: list[str]) -> str | None:
+    tags = {str(tag).lower() for tag in track_tags if tag}
+    moods = {str(mood).lower() for mood in track_moods if mood}
+    if {"jazz", "standard"}.issubset(tags):
+        return "차분한 스탠더드 재즈 분위기가 안정적으로 이어지는 곡이에요."
+    if {"rnb", "groove"}.issubset(tags):
+        return "부드러운 R&B와 가벼운 그루브가 함께 느껴지는 곡이에요."
+    if {"jazz", "instrumental"}.issubset(tags):
+        return "재즈 연주가 중심이면서 자극이 과하지 않은 곡이에요."
+    if "rhythmic" in tags or "groove" in tags:
+        return "잔잔한 분위기 안에 가벼운 리듬감이 있는 곡이에요."
+    if "calm" in moods or "calm" in tags:
+        return "차분한 분위기가 안정적으로 이어지는 곡이에요."
+    if "soft" in tags:
+        return "부드러운 분위기가 오래 이어 듣기 좋은 곡이에요."
+    if "focused" in moods or "focused" in tags:
+        return "일정한 분위기가 이어지는 곡이에요."
+    return None
+
+
+def _jazz_instrument_feature_sentence(track_facts: dict[str, object]) -> str | None:
+    tags = {str(tag).lower() for tag in track_facts.get("tags", []) if tag}
+    instruments = set(str(item).lower() for item in track_facts.get("instruments", []) if item)
+    if {"piano", "saxophone"}.issubset(instruments) and "jazz" in tags:
+        if "low_stimulation" in tags or "relaxed" in tags:
+            return "피아노와 색소폰이 함께하는 차분한 재즈 연주곡이에요."
+        return "피아노와 색소폰이 함께하는 재즈 연주곡이에요."
+    if "saxophone" in instruments and "jazz" in tags:
+        return "색소폰이 중심이 되는 재즈 연주곡이에요."
+    if "piano" in instruments and "jazz" in tags:
+        return "피아노가 중심이 되는 차분한 재즈 연주곡이에요."
+    return None
+
+
 def _dawn_sentimental_feature_sentence(
     track_tags: list[str], recommendation_role: dict[str, str] | None = None
 ) -> str | None:
@@ -1426,6 +1530,14 @@ def build_track_reason(
         sleep_feature = _sleep_feature_sentence(track_tags, track_moods)
         if sleep_feature:
             return f"{sleep_feature} {_role_listening_sentence(recommendation_role, index)}"
+    if _is_long_focus_request(context_text):
+        focus_feature = _focus_feature_sentence(track_tags, track_moods)
+        if focus_feature:
+            return f"{focus_feature} {_role_listening_sentence(recommendation_role, index)}"
+    if _is_calm_jazz_instrument_request(context_text):
+        jazz_feature = _jazz_instrument_feature_sentence(facts)
+        if jazz_feature:
+            return f"{jazz_feature} {_role_listening_sentence(recommendation_role, index)}"
     if _is_dawn_sentimental_request(context_text):
         dawn_feature = _dawn_sentimental_feature_sentence(track_tags, recommendation_role)
         if dawn_feature:
@@ -1727,6 +1839,8 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
     korean_band_rock_strength = _korean_band_rock_preference_strength(context_text)
     comfort_request = _context_requests_comfort(context_text)
     sleep_request = _is_sleep_request(context_text)
+    long_focus_request = _is_long_focus_request(context_text)
+    calm_jazz_instrument_request = _is_calm_jazz_instrument_request(context_text)
     dawn_sentimental_request = _is_dawn_sentimental_request(context_text)
     mbti_aesthetic = detect_mbti_aesthetic(context_text)
     family_trip_request = _is_family_trip_request(context_text)
@@ -1815,6 +1929,28 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
             score -= 28
         if candidate_tags & {"jazz", "standard"}:
             score += 3
+    if long_focus_request:
+        # Prefer a steady, low-stimulation palette for long listening sessions.
+        # Rhythm is a light variation, not a reason to promote high energy.
+        if "focused" in candidate_moods or "focused" in candidate_tags:
+            score += 14
+        if "calm" in candidate_moods or "calm" in candidate_tags:
+            score += 12
+        if candidate_tags & {"soft", "ambient", "instrumental", "groove", "rhythmic"}:
+            score += 6
+        if candidate_tags & {"high_energy", "driving", "aggressive", "busy"}:
+            score -= 24
+        if "upbeat" in candidate_tags:
+            score -= 8
+    if calm_jazz_instrument_request:
+        if "jazz" in candidate_tags:
+            score += 18
+        if {"piano", "saxophone"}.issubset(candidate_tags):
+            score += 20
+        if candidate_tags & {"low_stimulation", "relaxed", "subdued"}:
+            score += 18
+        if candidate_tags & {"hard-bop", "fusion", "swing", "big-band", "rhythmic_strong", "high_energy"}:
+            score -= 20
     if dawn_sentimental_request:
         # This request seeks mood congruence, not emotional regulation. Favor
         # verified dreamy and sentimental cues while keeping the playlist low-key.
@@ -1924,6 +2060,24 @@ def _select_fallback_catalog(
                 )
             ]
             catalog = exact_instruments + [candidate for candidate in partial_instruments if candidate not in exact_instruments]
+    if _is_long_focus_request(context_text):
+        focus_candidates = [
+            candidate
+            for candidate in catalog
+            if (
+                {"focused", "calm"}.intersection(set(candidate.get("moods", [])))
+                or {"focused", "calm", "soft", "ambient", "groove", "rhythmic"}.intersection(
+                    {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+                )
+            )
+            and not {"high_energy", "driving", "aggressive", "busy"}.intersection(
+                {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+            )
+        ]
+        if len(focus_candidates) >= limit:
+            catalog = focus_candidates
+        elif focus_candidates:
+            catalog = focus_candidates + [candidate for candidate in catalog if candidate not in focus_candidates]
     if _is_dawn_sentimental_request(context_text):
         preferred = [
             candidate
