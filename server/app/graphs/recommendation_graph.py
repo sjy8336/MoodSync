@@ -36,6 +36,7 @@ from app.services.recommendation_knowledge_base import build_recommendation_guid
 from app.services.spotify_service import (
     _enforce_korean_band_rock_selection,
     _is_korean_band_rock_track,
+    _is_calm_jazz_instrument_request,
     _korean_band_rock_preference_strength,
     build_selection_debug,
     _split_context,
@@ -535,23 +536,36 @@ def _apply_recommendation_copy(
             reason_map[track.track_id] = reason
             used_first_sentences.add(first_sentence)
             break
-    enriched_tracks = [
-        track.model_copy(
-            update={
-                "reason": reason_map.get(
-                    track.track_id,
-                    build_track_reason(
+    enriched_tracks: list[TrackSummary] = []
+    fallback_first_sentences: set[str] = set(reason_map.values())
+    fallback_first_sentences = {
+        _first_sentence_signature(reason) for reason in fallback_first_sentences if reason
+    }
+    for index, track in enumerate(tracks):
+        reason = reason_map.get(track.track_id)
+        if reason is None:
+            role = _recommendation_role(mood, index, input_text, reason_facts=track.reason_facts)
+            reason = build_track_reason(track, mood, input_text, index, role)
+            # For catalog-backed jazz fallback, prefer another supplied feature
+            # when the first sentence was already used in this playlist. This
+            # changes wording only; it never invents recording metadata.
+            if _is_calm_jazz_instrument_request(input_text):
+                for feature_index in range(index + 1, index + 8):
+                    if _first_sentence_signature(reason) not in fallback_first_sentences:
+                        break
+                    alternative = build_track_reason(
                         track,
                         mood,
                         input_text,
                         index,
-                        _recommendation_role(mood, index, input_text, reason_facts=track.reason_facts),
-                    ),
-                )
-            }
-        )
-        for index, track in enumerate(tracks)
-    ]
+                        role,
+                        reason_feature_index=feature_index,
+                    )
+                    if _first_sentence_signature(alternative) not in fallback_first_sentences:
+                        reason = alternative
+                        break
+            fallback_first_sentences.add(_first_sentence_signature(reason))
+        enriched_tracks.append(track.model_copy(update={"reason": reason}))
     return enriched_tracks, reason_map
 
 

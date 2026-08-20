@@ -1707,10 +1707,10 @@ def _focus_feature_sentence(track_tags: list[str], track_moods: list[str]) -> st
     return None
 
 
-def _jazz_instrument_feature_sentence(track_facts: dict[str, object]) -> str | None:
+def _jazz_instrument_feature_sentence(track_facts: dict[str, object], index: int = 0) -> str | None:
     tags = {str(tag).lower() for tag in track_facts.get("tags", []) if tag}
     if track_facts.get("instrumentation_verification") != "recording_metadata":
-        return _jazz_catalog_feature_sentence(tags)
+        return _jazz_catalog_feature_sentence(tags, index)
     instruments = set(str(item).lower() for item in track_facts.get("recording_instruments", []) if item)
     if {"piano", "saxophone"}.issubset(instruments) and "jazz" in tags:
         if "low_stimulation" in tags or "relaxed" in tags:
@@ -1723,25 +1723,30 @@ def _jazz_instrument_feature_sentence(track_facts: dict[str, object]) -> str | N
     return None
 
 
-def _jazz_catalog_feature_sentence(tags: set[str]) -> str | None:
+def _jazz_catalog_feature_sentence(tags: set[str], index: int = 0) -> str | None:
     """Describe only catalog-level genre/mood facts when recording instruments are unknown."""
+    feature_sentences: list[str] = []
     if "bossa-nova" in tags:
-        return "보사노바 계열의 가벼운 리듬이 있는 재즈 연주곡이에요."
-    if "modal" in tags:
-        return "모달 재즈 특유의 여유 있는 분위기가 이어지는 연주곡이에요."
+        feature_sentences.append("보사노바 계열의 가벼운 리듬이 있는 재즈 연주곡이에요.")
     if "odd_meter" in tags:
-        return "독특한 박자감이 또렷한 재즈 연주곡이에요."
+        feature_sentences.append("독특한 박자감이 또렷한 재즈 연주곡이에요.")
     if "hard-bop" in tags:
-        return "하드 밥 계열의 리듬감이 분명한 재즈 곡이에요."
+        feature_sentences.append("하드 밥 계열의 리듬감이 분명한 재즈 곡이에요.")
+    if "rhythmic_light" in tags or "groove" in tags:
+        feature_sentences.append("가벼운 리듬감이 있는 재즈 연주곡이에요.")
+    if "modal" in tags:
+        feature_sentences.append("모달 재즈 특성이 드러나는 연주곡이에요.")
+    if "low_stimulation" in tags:
+        feature_sentences.append("자극이 적은 편인 재즈 연주곡이에요.")
     if "standard" in tags:
-        return "재즈 스탠더드의 연주가 중심인 곡이에요."
-    if "low_stimulation" in tags and "relaxed" in tags:
-        return "차분한 분위기의 재즈 연주곡이에요."
+        feature_sentences.append("재즈 스탠더드의 연주가 중심인 곡이에요.")
     if "relaxed" in tags:
-        return "느긋한 분위기의 재즈 연주곡이에요."
+        feature_sentences.append("느긋한 분위기의 재즈 연주곡이에요.")
+    if "instrumental" in tags:
+        feature_sentences.append("기악 연주가 중심인 재즈 곡이에요.")
     if "jazz" in tags:
-        return "재즈 연주가 중심인 곡이에요."
-    return None
+        feature_sentences.append("재즈 연주가 중심인 곡이에요.")
+    return feature_sentences[index % len(feature_sentences)] if feature_sentences else None
 
 
 def _dawn_sentimental_feature_sentence(
@@ -1799,6 +1804,7 @@ def build_track_reason(
     context_text: str | None,
     index: int,
     recommendation_role: dict[str, str] | None = None,
+    reason_feature_index: int | None = None,
 ) -> str:
     normalized_mood = _normalize_mood(mood)
     mood_label = str(MOOD_PROFILES.get(normalized_mood, MOOD_PROFILES["calm"])["label"])
@@ -1845,7 +1851,9 @@ def build_track_reason(
         if focus_feature:
             return f"{focus_feature} {_role_listening_sentence(recommendation_role, index)}"
     if _is_calm_jazz_instrument_request(context_text):
-        jazz_feature = _jazz_instrument_feature_sentence(facts)
+        jazz_feature = _jazz_instrument_feature_sentence(
+            facts, index if reason_feature_index is None else reason_feature_index
+        )
         if jazz_feature:
             role_sentence = (
                 _calm_jazz_role_without_instrumentation(index)
