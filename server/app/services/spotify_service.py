@@ -1410,10 +1410,14 @@ def build_recommendation_message(
         if all_jazz and verified_piano_sax_count >= max(1, len(track_facts) // 2):
             return (
                 "오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 골라봤어요. "
-                f"피아노와 색소폰이 실제 녹음 정보로 확인된 곡을 중심으로, {'리듬감이 더 뚜렷한 곡도 일부' if high_rhythm_count or moderate_rhythm_count else '느긋한 연주를'} 함께 담았어요."
+                f"피아노와 색소폰이 어우러지는 연주를 중심으로, {'중간중간 가벼운 리듬감이 느껴지는 곡도' if high_rhythm_count or moderate_rhythm_count else '느긋한 연주를'} 함께 담았어요."
             )
-        rhythm_clause = "리듬감이 더 뚜렷한 곡은 일부만 포함하는 방식으로" if high_rhythm_count or moderate_rhythm_count else "느긋한 연주를 중심으로"
-        return f"오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 중심으로 골라봤어요. {rhythm_clause} 구성했고, 실제 녹음의 악기 정보가 확인되지 않은 곡은 악기를 추정하지 않았어요."
+        rhythm_clause = (
+            "차분한 연주를 중심으로, 중간중간 가벼운 리듬감이 느껴지는 곡도 함께 담았어요."
+            if high_rhythm_count or moderate_rhythm_count
+            else "느긋한 연주를 중심으로 골라봤어요."
+        )
+        return f"오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 중심으로 골라봤어요. {rhythm_clause}"
 
     if study_flow_request and avoids_overstimulation:
         return "지금의 좋은 집중 흐름은 유지하면서도 너무 과하지 않게 활기를 더할 수 있는 곡들을 골라봤어요."

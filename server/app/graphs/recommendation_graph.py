@@ -459,6 +459,15 @@ def _is_safe_recommendation_message(
         "날려보낼",
         "풀어낼",
         "털어낼",
+        "metadata",
+        "확인되지 않은",
+        "추정하지 않았",
+        "검증된 곡",
+        "검증을 통과",
+        "ranking",
+        "후보를",
+        "방식으로 구성",
+        "일부만 포함",
     )
     if any(marker in message for marker in disallowed_markers) or ("초조" in message and "조급" in message):
         return False

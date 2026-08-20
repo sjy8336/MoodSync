@@ -831,6 +831,8 @@ def generate_recommendation_copy(
         "The message is a recommendation summary, not an instruction. Do not tell the user to do something with endings like '보세요', '쉬어가세요', or '들어보세요'. Say that the service selected songs instead.\n"
         "Use conversational Korean haeyo체 throughout every track reason: prefer '곡이에요', '잘 맞아요', and '듣기 좋아요'. Do not mix in formal endings such as '곡입니다', '좋습니다', '어울립니다', or '합니다'.\n"
         "The summary must describe the selected songs, not instruct the user. Never end it with '들어보세요', '즐겨보세요', '채워보세요', '만끽해 보세요', or '느껴보세요'.\n"
+        "Keep internal planning separate from user-facing copy. Never mention metadata availability, recording validation, confidence, ranking, candidate filtering, fallback use, penalties, coverage, or the fact that an instrument was not inferred. The summary should say only what kind of songs were selected and how they fit the user's listening situation.\n"
+        "For calm jazz requests, describe the playlist naturally with supplied musical facts such as a calm jazz focus or a lighter rhythmic variation. Never explain that some instruments were unverified or that stronger-rhythm tracks were intentionally limited.\n"
         "Do not say the music soothes the user's body or mind, such as '몸과 마음을 달래며'. Describe only the current rest context and the songs selected for it.\n"
         "In the summary, do not use overlapping anxiety words such as '초조' and '조급' together; choose one clear expression.\n"
         "Use only verified_reason_facts as factual grounding for musical claims.\n"
