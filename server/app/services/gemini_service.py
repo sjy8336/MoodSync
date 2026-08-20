@@ -145,6 +145,15 @@ _FAMILY_TRIP_ROLES = [
     ("여행의 설렘 이어가기", "목적지로 향하는 시간을 즐겁게 이어가고 싶을 때"),
 ]
 
+_DRIVE_ROLES = [
+    ("드라이브 시작 분위기 열기", "주말 드라이브를 시작하며 신나는 곡을 듣고 싶을 때"),
+    ("차 안에서 따라 부르기", "차 안에서 함께 따라 부르기 좋은 곡을 찾을 때"),
+    ("팝 분위기 더하기", "도로 위에서 밝은 팝 분위기를 이어가고 싶을 때"),
+    ("펑크 에너지 더하기", "강한 밴드 사운드로 드라이브 분위기를 바꾸고 싶을 때"),
+    ("이동 중 리듬 변화", "이동하면서 에너지 있는 곡을 이어 듣고 싶을 때"),
+    ("장거리 드라이브 기분 유지", "멀리 이동하는 동안 활기 있는 음악을 듣고 싶을 때"),
+]
+
 
 def _build_listening_request_context(text: str | None, selected_vibes: list[str] | None) -> dict[str, object]:
     """Extract explicit goals and limits without adding another model call."""
@@ -164,6 +173,10 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
     is_family_trip = any(token in raw_text for token in ("가족 여행", "가족여행", "여행")) and any(
         token in raw_text for token in ("차", "자동차", "드라이브", "이동")
     )
+    is_drive = any(
+        token in raw_text or token in lowered
+        for token in ("차 타고", "차 안", "드라이브", "도로 위", "운전", "drive", "road trip")
+    )
     korean_band_rock = any(token in raw_text or token in lowered for token in ("우리나라 밴드", "국내 밴드", "한국 밴드", "korean band")) and any(
         token in raw_text or token in lowered for token in ("락", "록", "rock")
     )
@@ -175,6 +188,14 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         for token in ("가사가 없는", "가사 없는", "가사없이", "가사 없이", "무가사", "연주곡", "보컬 없는", "보컬이 없는", "instrumental")
     )
     explicit_jazz = any(token in raw_text or token in lowered for token in ("재즈", "jazz"))
+    explicit_genres = []
+    is_pop_punk_compound = any(token in lowered or token in raw_text for token in ("pop-punk", "pop punk", "팝펑크", "팝 펑크"))
+    if not is_pop_punk_compound and any(token in lowered or token in raw_text for token in ("pop", "팝")):
+        explicit_genres.append("pop")
+    if not is_pop_punk_compound and any(token in lowered or token in raw_text for token in ("punk", "펑크")):
+        explicit_genres.append("punk")
+    if is_pop_punk_compound:
+        explicit_genres.append("pop-punk")
     instrument_preferences = []
     if any(token in raw_text or token in lowered for token in ("피아노", "piano")):
         instrument_preferences.append("piano")
@@ -189,6 +210,7 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         "priority": [],
         "hard_constraints": {"instrumental_required": instrumental_required},
         "explicit_genre": "jazz" if explicit_jazz else None,
+        "explicit_genres": explicit_genres,
         "instrument_preferences": instrument_preferences,
         "mbti_aesthetic": detect_mbti_aesthetic(raw_text),
     }
@@ -210,6 +232,12 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         context["goal"] = ["여행 기분 살리기", "차 안 분위기 밝게 만들기", "가족이 함께 즐기기"]
         context["avoid"] = ["지나치게 공격적인 분위기", "특정 취향층에 치우친 곡", "공부 또는 업무 맥락"]
         context["priority"] = ["가족 여행과 차 안 맥락", "대중적인 친숙함", "신나는 분위기", "현재 계절"]
+    elif is_drive:
+        context["context"] = "주말 장거리 드라이브"
+        context["current_state"] = ["주말 외출을 앞두고 설레는 상태", "도로 위에서 활기 있는 음악을 듣고 싶은 상태"]
+        context["goal"] = ["차 안 분위기를 신나게 만들기", "따라 부르기 좋은 에너지 있는 음악 듣기"]
+        context["avoid"] = ["지나치게 차분하거나 잠 오는 분위기", "공부 또는 업무 맥락"]
+        context["priority"] = ["명시한 팝·펑크 장르", "드라이브 적합성", "에너지", "기분 전환"]
     elif korean_band_rock:
         context["context"] = "국내 밴드 록 감정 전환"
         context["current_state"] = ["화나는 일이 있어 답답하고 분노가 남아 있음"]
@@ -582,9 +610,10 @@ def _recommendation_role(
     reason_facts: object | None = None,
 ) -> dict[str, str]:
     request_context = _build_listening_request_context(context_text, selected_vibes)
-    has_study_flow = bool(request_context["context"]) and bool(request_context["current_state"])
+    has_study_flow = request_context["context"] in {"공부 또는 작업", "장시간 이어 듣는 집중 세션"}
     is_sleep_context = request_context["context"] == "수면 준비"
     is_family_trip_context = request_context["context"] == "가족 여행의 차 안"
+    is_drive_context = request_context["context"] == "주말 장거리 드라이브"
     is_korean_rock_context = request_context["context"] == "국내 밴드 록 감정 전환"
     is_dawn_sentimental_context = request_context["context"] == "새벽 감성 플레이리스트"
     is_long_focus_context = request_context["context"] == "장시간 이어 듣는 집중 세션"
@@ -605,6 +634,8 @@ def _recommendation_role(
         roles = [_SLEEP_ROLES[role_index] for role_index in role_order]
     elif is_family_trip_context:
         roles = _FAMILY_TRIP_ROLES
+    elif is_drive_context:
+        roles = _DRIVE_ROLES
     elif is_korean_rock_context:
         roles = _CATHARTIC_KOREAN_ROCK_ROLES
     elif is_dawn_sentimental_context:
@@ -812,6 +843,9 @@ def generate_recommendation_copy(
         "Do not state that music resolves or gives comfort to the user, such as '위로를 받을 수 있어요'. Prefer a listening context like '조용히 쉬어가고 싶은 순간에 잘 어울려요'.\n"
         "The first sentence must be different for every track. Use each track's supplied music_feature rather than copying another track's opening.\n"
         "For family-trip copy, do a final lexical check: never repeat a nearby word such as '기분을 기분 좋게', '밝은 분위기를 밝게', or '이어지는 ... 이어가고'. Do not use '곁들이기 좋아요' more than once across the six reasons. Spread natural endings such as '듣기 좋아요', '잘 맞아요', and '함께 즐기기 좋아요'; do not end every reason with '잘 어울려요'.\n"
+        "For drive requests, use only the current road-trip context: driving, car listening, singalong intent, upbeat energy, and the supplied genres. Never use study, work, focus, immersion, task, pace-maintenance, or stale Korean-band-origin roles unless the current text explicitly contains them.\n"
+        "Treat '팝과 펑크', '팝, 펑크', and '팝이랑 펑크' as two explicit genre axes, pop and punk. Treat '팝펑크' or 'pop-punk' as the single pop-punk genre. Do not collapse the former into pop-punk.\n"
+        "For drive reasons, keep sentence 2 tied to the car/road-trip moment. Use roles such as opening a weekend drive, singalong listening, bright pop on the road, strong punk-band sound, or changing the rhythm during a long drive. Do not mention studying or maintaining a work flow.\n"
         "For a dawn-sentimental request, interpret words such as '새벽', '센치', and 'INFP 감성' as a late-night, introspective aesthetic. Do not infer a personality trait or claim that a personality type prefers a genre. This request seeks emotional congruence, not recovery: never use study, work, tasks, focus, productivity, rest, healing, tension relief, or mood-improvement roles. Keep the late-night context even if the current clock is not dawn. Prefer dreamy, emotional, soft, calm, ambient, or R&B/Soul facts only when supplied.\n"
         "For every dawn-sentimental reason, keep two sentences: first only verified track traits, then a distinct role such as lingering in the dawn mood, following a sentimental feeling, or staying with a lingering thought. Do not use '잠시 쉬어가며 듣기 좋아요' in this context. Translate emotional metadata naturally as '감성적인', '여운이 있는', or '차분한' only when verified; never write the unnatural phrase '감정적인 분위기이'.\n"
         "For a dawn-sentimental playlist, reason_ingredient is code-selected verified planning data. Sentence 1 must use its primary_feature as a natural track description. When its secondary_feature is present, combine it only when the two form one natural phrase; never make an attribute list. Sentence 2 must use recommendation_role only as the user's late-night listening moment, never as study, work, recovery, or rest advice.\n"

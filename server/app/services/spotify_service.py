@@ -63,6 +63,7 @@ GENRE_FAMILY_HINTS: list[tuple[tuple[str, ...], str, list[str], dict[str, object
     (("funk", "펑키", "groove", "groovy"), "펑키", ["funk", "disco", "dance"], {"target_energy": 0.76, "target_danceability": 0.82}),
     (("disco", "디스코"), "디스코", ["disco", "funk", "dance"], {"target_energy": 0.8, "target_danceability": 0.86}),
     (("punk rock", "펑크락", "펑크"), "펑크락", ["punk", "rock", "alternative", "hard-rock"], {"target_energy": 0.88, "target_danceability": 0.7}),
+    (("pop", "팝"), "팝", ["pop", "dance-pop", "synth-pop"], {"target_energy": 0.68, "target_danceability": 0.72}),
     (("rock", "록 음악", "록밴드", "락"), "록", ["rock", "alternative", "punk", "hard-rock"], {"target_energy": 0.82, "target_danceability": 0.58}),
     (("indie pop", "indie-pop", "인디팝"), "인디팝", ["indie", "pop", "alternative"], {"target_energy": 0.46, "target_acousticness": 0.46}),
     (("folk", "포크", "americana", "아메리카나", "bluegrass", "블루그래스"), "포크", ["folk", "acoustic", "americana"], {"target_energy": 0.28, "target_acousticness": 0.84}),
@@ -304,7 +305,7 @@ def _is_long_focus_request(context_text: str | None) -> bool:
 
 
 def _is_calm_jazz_instrument_request(context_text: str | None) -> bool:
-    explicit_genres, _, _ = _extract_genre_family_matches(context_text)
+    explicit_genres, genre_labels, _ = _extract_genre_family_matches(context_text)
     preferences = extract_instrument_preferences(context_text)
     return "jazz" in explicit_genres and bool(preferences.get("instruments")) and any(
         token in (context_text or "") for token in ("자극", "차분", "지쳐", "피곤", "천천히", "긴장")
@@ -580,9 +581,9 @@ MOOD_ALIASES = {
 }
 
 FALLBACK_LIBRARY: list[dict[str, object]] = [
-    {"name": "Blinding Lights", "artist_name": "The Weeknd", "moods": ["anxious", "excited", "focused", "happy"], "tags": ["driving", "high_energy", "global_only"], "generation": "recent", "release_year": 2019, "cross_generation_fit": 1},
-    {"name": "Don't Start Now", "artist_name": "Dua Lipa", "moods": ["anxious", "excited", "happy"], "tags": ["upbeat", "high_energy", "global_only"], "generation": "recent"},
-    {"name": "Levitating", "artist_name": "Dua Lipa", "moods": ["excited", "happy"], "tags": ["upbeat", "dance", "global_only"], "generation": "recent", "release_year": 2020, "cross_generation_fit": 1},
+    {"name": "Blinding Lights", "artist_name": "The Weeknd", "moods": ["anxious", "excited", "focused", "happy"], "tags": ["pop", "driving", "high_energy", "global_only"], "generation": "recent", "release_year": 2019, "cross_generation_fit": 1},
+    {"name": "Don't Start Now", "artist_name": "Dua Lipa", "moods": ["anxious", "excited", "happy"], "tags": ["pop", "upbeat", "high_energy", "global_only"], "generation": "recent"},
+    {"name": "Levitating", "artist_name": "Dua Lipa", "moods": ["excited", "happy"], "tags": ["pop", "upbeat", "dance", "global_only"], "generation": "recent", "release_year": 2020, "cross_generation_fit": 1},
     {"name": "HUMBLE.", "artist_name": "Kendrick Lamar", "moods": ["anxious", "angry", "focused"], "tags": ["driving", "rhythmic"]},
     {"name": "Lose Yourself", "artist_name": "Eminem", "moods": ["anxious", "focused", "angry"], "tags": ["driving", "focused"]},
     {"name": "Bad Habit", "artist_name": "Steve Lacy", "moods": ["lonely", "sad", "focused"], "tags": ["rnb", "groove"]},
@@ -838,8 +839,16 @@ def _extract_genre_family_matches(context_text: str | None) -> tuple[list[str], 
     seed_genres: list[str] = []
     labels: list[str] = []
     params: dict[str, object] = {}
+    is_pop_punk_compound = any(
+        token in lowered or token in context_text
+        for token in ("pop-punk", "pop punk", "팝펑크", "팝 펑크")
+    )
 
     for keywords, label, genres, audio_params in GENRE_FAMILY_HINTS:
+        # "팝과 펑크" means two requested genre axes. Only the explicit
+        # compounds above should collapse into the pop-punk family.
+        if is_pop_punk_compound and label in {"팝", "펑크락"}:
+            continue
         if any((keyword in lowered if keyword.isascii() else keyword in context_text) for keyword in keywords):
             labels.append(label)
             seed_genres.extend(genres)
@@ -855,7 +864,16 @@ def _has_explicit_genre_request(context_text: str | None) -> bool:
 
 def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) -> dict[str, object]:
     """Expose request-isolation facts without carrying state between requests."""
-    explicit_genres, _, _ = _extract_genre_family_matches(context_text)
+    explicit_genres, genre_labels, _ = _extract_genre_family_matches(context_text)
+    lowered_context = (context_text or "").lower()
+    compound_pop_punk = any(token in lowered_context or token in (context_text or "") for token in ("pop-punk", "pop punk", "팝펑크", "팝 펑크"))
+    requested_genre_axes = []
+    if not compound_pop_punk and ("pop" in lowered_context or "팝" in (context_text or "")):
+        requested_genre_axes.append("pop")
+    if not compound_pop_punk and ("punk" in lowered_context or "펑크" in (context_text or "")):
+        requested_genre_axes.append("punk")
+    if compound_pop_punk:
+        requested_genre_axes.append("pop-punk")
     current_genre = explicit_genres[0] if explicit_genres else None
     selected_tracks = []
     for track in tracks:
@@ -902,6 +920,10 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         "previous_request_explicit_genre": None,
         "current_request_genre": current_genre,
         "current_request_explicit_genre": current_genre,
+        "current_request_explicit_genres": explicit_genres,
+        "current_request_requested_genre_axes": requested_genre_axes,
+        "current_request_genre_labels": genre_labels,
+        "current_artist_origin_preference": None,
         "genre_state_reset": True,
         "previous_candidate_pool_reused": False,
         "focus_request_feature_reset": True,
@@ -914,6 +936,9 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             else {"low_stimulation": 1.0, "sustained_focus": 1.0, "calm": 0.9, "light_rhythm": 0.7}
         ),
         "genre_bonus": 0 if not explicit_genres else 1.0,
+        "drive_request": _is_drive_request(context_text),
+        "previous_focus_context_reset": True,
+        "previous_artist_origin_preference_reset": True,
         "selected_track_count": len(tracks),
         "selected_tracks": selected_tracks,
     }
@@ -1250,6 +1275,13 @@ def _context_prefers_punk_rock(context_text: str | None) -> bool:
     return any(token in context_text or token in lowered for token in ("펑크락", "punk rock", "punk", "펑크"))
 
 
+def _is_drive_request(context_text: str | None) -> bool:
+    if not context_text or not isinstance(context_text, str):
+        return False
+    lowered = context_text.lower()
+    return any(token in context_text or token in lowered for token in ("차 타고", "차 안", "드라이브", "도로 위", "운전", "drive", "road trip"))
+
+
 def _korean_band_rock_preference_strength(context_text: str | None) -> str | None:
     """Parse origin, artist type, genre, and strength instead of one vague tag."""
     if not context_text:
@@ -1434,6 +1466,12 @@ def build_recommendation_message(
         calm_clause = "차분한 곡들을 중심으로" if calm_count else "오래 이어 듣기 부담이 적은 곡들을 중심으로"
         return f"노트북 앞에 오래 앉아 있을 때 {calm_clause} 골라봤어요. {rhythm_clause}"
 
+    if _is_drive_request(context_text) and not _is_family_trip_request(context_text):
+        return (
+            "주말 장거리 드라이브에 어울리는 신나는 팝과 펑크 곡들을 골라봤어요. "
+            "차 안에서 따라 부르기 좋은 밝은 곡과 강한 밴드 사운드를 함께 담았어요."
+        )
+
     if _is_family_trip_request(context_text):
         season_text = "여름" if _current_season() == "summer" else "지금 계절"
         departure = "내일 가족과 함께 떠나는" if "내일" in (context_text or "") else "가족과 함께 떠나는"
@@ -1527,6 +1565,12 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
         "이동 중 분위기 환기하기": "이동이 길어져 분위기를 가볍게 바꾸고 싶을 때 어울려요.",
         "여름 드라이브 분위기 살리기": "여름 여행의 들뜬 분위기를 조금 더 살리고 싶은 순간에 듣기 좋아요.",
         "여행의 설렘 이어가기": "목적지로 향하는 시간을 즐겁게 이어가고 싶을 때 듣기 좋아요.",
+        "드라이브 시작 분위기 열기": "주말 드라이브를 시작하며 신나는 곡을 듣고 싶을 때 잘 맞아요.",
+        "차 안에서 따라 부르기": "차 안에서 함께 따라 부르기 좋은 곡을 찾을 때 듣기 좋아요.",
+        "팝 분위기 더하기": "도로 위에서 밝은 팝 분위기를 이어가고 싶을 때 잘 맞아요.",
+        "펑크 에너지 더하기": "강한 밴드 사운드로 드라이브 분위기를 바꾸고 싶을 때 어울려요.",
+        "이동 중 리듬 변화": "이동하면서 에너지 있는 곡을 이어 듣고 싶을 때 듣기 좋아요.",
+        "장거리 드라이브 기분 유지": "멀리 이동하는 동안 활기 있는 음악을 듣고 싶을 때 잘 맞아요.",
         "새벽 분위기에 천천히 잠기기": "새벽 특유의 고요한 분위기에 천천히 잠기고 싶을 때 잘 맞아요.",
         "혼자 생각에 머물기": "혼자 생각이 길어지는 순간에 듣기 좋아요.",
         "센치한 감정을 따라가기": "센치해진 감정을 억지로 바꾸지 않고 따라가고 싶을 때 잘 어울려요.",
@@ -1798,6 +1842,24 @@ def _korean_band_rock_feature_sentence(track_tags: list[str], index: int = 0) ->
     return None
 
 
+def _drive_feature_sentence(track_tags: list[str]) -> str | None:
+    """Describe a supplied drive/genre feature without promising an effect."""
+    tags = {str(tag).lower() for tag in track_tags if tag}
+    if "pop-punk" in tags:
+        return "팝과 펑크의 성격이 함께 드러나는 팝펑크 곡이에요."
+    if "punk" in tags:
+        return "강한 밴드 사운드가 중심인 펑크 록 곡이에요."
+    if "pop" in tags or "dance-pop" in tags or "synth-pop" in tags:
+        return "밝고 신나는 팝 분위기가 또렷한 곡이에요."
+    if "rock" in tags:
+        return "록 사운드가 중심인 곡이에요."
+    if "high_energy" in tags or "driving" in tags:
+        return "에너지 있는 분위기가 분명한 곡이에요."
+    if "upbeat" in tags:
+        return "밝고 경쾌한 분위기가 이어지는 곡이에요."
+    return None
+
+
 def build_track_reason(
     track: TrackSummary,
     mood: str,
@@ -1850,6 +1912,10 @@ def build_track_reason(
         focus_feature = _focus_feature_sentence(track_tags, track_moods)
         if focus_feature:
             return f"{focus_feature} {_role_listening_sentence(recommendation_role, index)}"
+    if _is_drive_request(context_text) and not _is_family_trip_request(context_text):
+        drive_feature = _drive_feature_sentence(track_tags)
+        if drive_feature:
+            return f"{drive_feature} {_role_listening_sentence(recommendation_role, index)}"
     if _is_calm_jazz_instrument_request(context_text):
         jazz_feature = _jazz_instrument_feature_sentence(
             facts, index if reason_feature_index is None else reason_feature_index
@@ -2180,6 +2246,7 @@ def _score_fallback_candidate(
     dawn_sentimental_request = _is_dawn_sentimental_request(context_text)
     mbti_aesthetic = detect_mbti_aesthetic(context_text)
     family_trip_request = _is_family_trip_request(context_text)
+    drive_request = _is_drive_request(context_text)
     explicit_genres, _, _ = _extract_genre_family_matches(context_text)
     explicit_genre_set = set(explicit_genres)
     instrument_preferences = extract_instrument_preferences(context_text)
@@ -2336,6 +2403,13 @@ def _score_fallback_candidate(
             score -= 12
         if "youth_skewed" in candidate_tags:
             score -= 40
+    if drive_request and not family_trip_request:
+        if candidate_tags & {"driving", "high_energy", "upbeat", "rock", "punk", "pop-punk", "pop"}:
+            score += 16
+        if candidate_tags & {"calm", "soft", "ambient", "instrumental"} and not candidate_tags & {"upbeat", "driving", "high_energy"}:
+            score -= 10
+        if candidate_tags & {"mainstream", "prominent_vocal"}:
+            score += 4
         if "global_only" in candidate_tags:
             score -= 40
     if any(token in context_lower for token in ("스윙", "swing", "빅밴드", "big band")) and candidate_tags & {"jazz", "standard", "instrumental"}:
@@ -2525,8 +2599,39 @@ def _select_fallback_catalog(
     diversify_categories = not explicit_genre_set and not diversify_family_trip and not diversify_korean_band_rock
     focus_genre_counts: dict[str, int] = {}
     candidate_pool = ranked[: max(limit * 3, limit)]
+    genre_coverage_candidates: list[dict[str, object]] = []
+    if {"pop", "punk"}.issubset(explicit_genre_set):
+        pure_pop = next(
+            (
+                candidate
+                for candidate in ranked
+                if "pop" in {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+                and not {"punk", "pop-punk", "rock"}.intersection(
+                    {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+                )
+                and (
+                    not _is_drive_request(context_text)
+                    or {"upbeat", "high_energy", "driving"}.intersection(
+                        {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+                    )
+                )
+            ),
+            None,
+        )
+        punk_side = next(
+            (
+                candidate
+                for candidate in ranked
+                if {"punk", "rock", "pop-punk"}.intersection(
+                    {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+                )
+                and candidate is not pure_pop
+            ),
+            None,
+        )
+        genre_coverage_candidates = [candidate for candidate in (pure_pop, punk_side) if candidate]
     category_counts: dict[str, int] = {}
-    for candidate in candidate_pool:
+    for candidate in genre_coverage_candidates + candidate_pool:
         key = (str(candidate.get("name") or ""), str(candidate.get("artist_name") or ""))
         if key in seen:
             continue
