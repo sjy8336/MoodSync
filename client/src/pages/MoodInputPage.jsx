@@ -317,19 +317,17 @@ export default function MoodInputPage() {
 
                         {isDemoUser && (
                             <div className="opacity-0 [animation:ms-fadeUp_0.6s_ease_forwards] [animation-delay:0.08s] mb-6 rounded-3xl border border-[#C7C9FA] bg-[#F2F3FF] p-5 shadow-[0_10px_30px_-18px_rgba(123,127,240,0.45)]">
-                                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-                                    <div>
-                                        <div className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[5px] text-[11px] font-bold tracking-[0.05em] text-white">
-                                            DEMO
-                                        </div>
-                                        <p className="mt-2 text-[13px] font-semibold text-[#4B4FD0]">
-                                            {demoPresetLabel} 상태예요. 아래 예시를 눌러 바로 추천 흐름을 테스트해보세요.
-                                        </p>
-                                    </div>
-                                    <span className="text-[11.5px] font-semibold text-[#4B4FD0]">
-                                        현재 데모 프리셋: {selectedDemoPresetKey}
+                                <div className="mb-2 flex flex-wrap items-center gap-2">
+                                    <span className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[6px] text-[12px] font-bold text-white">
+                                        DEMO
+                                    </span>
+                                    <span className="text-[12.5px] font-semibold text-[#4B4FD0]">
+                                        {demoPresetLabel}
                                     </span>
                                 </div>
+                                <p className="m-0 text-[13.5px] leading-[1.7] text-[#4B4FD0]">
+                                    {demoPresetLabel} 상태예요. 아래 예시를 눌러 바로 추천 흐름을 테스트해보세요.
+                                </p>
 
                                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
                                     {Object.entries(DEMO_QUICK_FILL).map(([key, scenario]) => {

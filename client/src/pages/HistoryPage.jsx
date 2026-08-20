@@ -1142,15 +1142,20 @@ export default function HistoryPage() {
                         >
                             <div className="flex flex-col gap-4 min-[700px]:flex-row min-[700px]:items-end min-[700px]:justify-between">
                                 <div>
-                                    <div className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[5px] text-[11px] font-bold tracking-[0.05em] text-white">
-                                        DEMO
+                                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        <span className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[6px] text-[12px] font-bold text-white">
+                                            DEMO
+                                        </span>
+                                        <span className="text-[12.5px] font-semibold text-[#4B4FD0]">
+                                            {demoPresetLabel}
+                                        </span>
                                     </div>
-                                    <h2 className="mt-3 text-[18px] font-extrabold tracking-[-0.02em] text-[#211C26]">
-                                        {demoPresetLabel}<br />기록이 미리 들어 있어요
+                                    <h2 className="text-[18px] font-extrabold tracking-[-0.02em] text-[#211C26]">
+                                        기록이 미리 들어 있어요
                                     </h2>
                                     <p className="mt-1.5 max-w-[620px] text-[13.5px] leading-[1.7] text-[#4B4FD0]">
-                                        날짜를 눌러 샘플 감정 흐름과 추천 결과를 바로 확인할 수 있어요. 캘린더,
-                                        감정 분포, 최근 추천 카드까지 실제처럼 테스트해보세요.
+                                        날짜를 눌러 샘플 감정 흐름과 추천 결과를 바로 확인할 수 있어요. <br/>
+                                        캘린더, 감정 분포, 최근 추천 카드까지 실제처럼 테스트해보세요.
                                     </p>
                                 </div>
 

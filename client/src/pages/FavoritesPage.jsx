@@ -436,7 +436,13 @@ export default function FavoritesPage() {
                 const response = await getFavorites();
                 if (!active) return;
                 const items = Array.isArray(response) ? response : response?.items || [];
-                setTracks(items);
+                setTracks(
+                    items.map((item) => ({
+                        ...item,
+                        name: item.name || item.track_name || '제목 없는 곡',
+                        artist_name: item.artist_name || '알 수 없는 아티스트',
+                    }))
+                );
             } catch (error) {
                 if (!active) return;
                 setLoadError(error.message || '좋아요한 곡을 불러오지 못했어요.');
@@ -512,11 +518,16 @@ export default function FavoritesPage() {
                         <div className="fav-fu mb-6 rounded-[24px] border border-[#C7C9FA] bg-[#F2F3FF] px-5 py-5 shadow-[0_10px_30px_-18px_rgba(123,127,240,0.4)]">
                             <div className="flex flex-col gap-4 min-[700px]:flex-row min-[700px]:items-end min-[700px]:justify-between">
                                 <div>
-                                    <div className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[5px] text-[11px] font-bold tracking-[0.05em] text-white">
-                                        DEMO
+                                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        <span className="inline-flex items-center rounded-full bg-[#7B7FF0] px-3 py-[6px] text-[12px] font-bold text-white">
+                                            DEMO
+                                        </span>
+                                        <span className="text-[12.5px] font-semibold text-[#4B4FD0]">
+                                            {demoPresetLabel}
+                                        </span>
                                     </div>
-                                    <h2 className="mt-3 text-[18px] font-extrabold tracking-[-0.02em] text-[#211C26]">
-                                        {demoPresetLabel}<br />좋아요 샘플이 들어 있어요
+                                    <h2 className="text-[18px] font-extrabold tracking-[-0.02em] text-[#211C26]">
+                                        좋아요 샘플이 들어 있어요
                                     </h2>
                                     <p className="mt-1.5 max-w-[620px] text-[13.5px] leading-[1.7] text-[#4B4FD0]">
                                         좋아요를 눌렀다 취소해보면서 반영 상태를 확인해보세요. <br/>

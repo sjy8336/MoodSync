@@ -105,6 +105,19 @@
         font-family: inherit;
     }
 
+    a,
+    button:not(:disabled),
+    [role='button'],
+    label,
+    select,
+    summary {
+        cursor: pointer;
+    }
+
+    button:disabled {
+        cursor: not-allowed;
+    }
+
     body {
         font-family: Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
     }

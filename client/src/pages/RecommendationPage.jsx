@@ -720,64 +720,65 @@ export default function RecommendationPage() {
         const initial = location.state?.result ?? persisted?.result ?? null;
         const recommendationId = initial?.recommendation?.id;
         const isPending = Boolean(initial?.recommendation?.generation_profile?.gemini_copy_pending);
-        if (recommendationId && isPending) {
-            let attempts = 0;
-            let timerId;
-            const refreshRecommendation = async () => {
-                try {
-                    const summary = await getMoodDashboard();
-                    if (!active) return;
-                    const latest = summary?.latest_recommendation;
-                    if (latest?.id === recommendationId) {
-                        setDashboardSummary(summary);
-                        if (!latest.generation_profile?.gemini_copy_pending) {
-                            window.clearInterval(timerId);
-                            if (latest.generation_profile?.reason_source === 'gemini') {
-                                console.info('[Mood Sync] Gemini 추천 이유가 결과 화면에 반영되었습니다');
-                            } else {
-                                console.warn('[Mood Sync] Gemini 생성이 끝났지만 fallback 이유를 유지합니다', {
-                                    error: latest.generation_profile?.gemini_copy_error || null,
-                                });
-                            }
-                        }
-                    }
-                } catch {
-                    void 0;
-                } finally {
-                    attempts += 1;
-                    if (attempts >= 15 && timerId) window.clearInterval(timerId);
-                }
-            };
-            timerId = window.setInterval(refreshRecommendation, 3000);
-            refreshRecommendation();
-            setDashboardLoaded(true);
-            return () => {
-                active = false;
-                window.clearInterval(timerId);
-            };
-        }
+        let attempts = 0;
+        let timerId;
 
-        if (initial) {
-            setDashboardLoaded(true);
-            return;
-        }
-
-        const loadDashboard = async () => {
+        const refreshDashboard = async () => {
             try {
                 const summary = await getMoodDashboard();
                 if (!active) return;
                 setDashboardSummary(summary);
+
+                const latest = summary?.latest_recommendation;
+                const latestIsPending = Boolean(latest?.generation_profile?.gemini_copy_pending);
+                if (recommendationId && latest?.id === recommendationId && !latestIsPending) {
+                    // Do not show the stale pending state again after revisiting this page.
+                    const completedResult = {
+                        ...(initial || {}),
+                        mood: latest.mood || initial?.mood || '',
+                        tracks: latest.tracks || [],
+                        mood_record: summary.today_mood || initial?.mood_record || null,
+                        recommendation: latest,
+                    };
+                    saveState({
+                        ...(persisted || {}),
+                        result: completedResult,
+                        payload: location.state?.payload ?? persisted?.payload ?? null,
+                        generatedAt: latest.created_at || persisted?.generatedAt || new Date().toISOString(),
+                    });
+
+                    if (timerId) window.clearInterval(timerId);
+                    if (isPending) {
+                        if (latest.generation_profile?.reason_source === 'gemini') {
+                            console.info('[Mood Sync] Gemini 추천 이유가 결과 화면에 반영되었습니다');
+                        } else {
+                            console.warn('[Mood Sync] Gemini 생성이 끝났지만 fallback 이유를 유지합니다', {
+                                error: latest.generation_profile?.gemini_copy_error || null,
+                            });
+                        }
+                    }
+                }
             } catch (error) {
-                if (!active) return;
-                setDashboardError(error.message || '최근 추천을 불러오지 못했어요.');
+                if (active && !initial) {
+                    setDashboardError(error.message || '최근 추천을 불러오지 못했어요.');
+                }
             } finally {
-                if (active) setDashboardLoaded(true);
+                if (!active) return;
+                attempts += 1;
+                if (attempts >= 15 && timerId) window.clearInterval(timerId);
+                setDashboardLoaded(true);
             }
         };
 
-        loadDashboard();
+        // A cached result renders immediately, while this refresh keeps its status current.
+        refreshDashboard();
+        if (recommendationId && isPending) {
+            timerId = window.setInterval(refreshDashboard, 3000);
+        }
+
         return () => {
             active = false;
+            if (timerId) window.clearInterval(timerId);
         };
     }, [location.state]);
 

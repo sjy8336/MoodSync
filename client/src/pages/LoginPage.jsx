@@ -135,12 +135,13 @@ export default function LoginPage() {
     const [message, setMessage] = useState('');
     const [selectedPreset, setSelectedPreset] = useState(DEMO_PRESETS[0]);
     const fromPath = location.state?.from || '/home';
+    const hasProtectedRedirect = Boolean(location.state?.from);
 
     useEffect(() => {
-        if (isAuthenticated) {
+        if (isAuthenticated && hasProtectedRedirect) {
             navigate(fromPath, { replace: true });
         }
-    }, [fromPath, isAuthenticated, navigate]);
+    }, [fromPath, hasProtectedRedirect, isAuthenticated, navigate]);
 
     useEffect(() => {
         const code = searchParams.get('code');
