@@ -138,7 +138,10 @@ export function recommendMood(payload) {
             hasRagContext: profile.has_rag_context ?? null,
             error: profile.gemini_copy_error ?? null,
             pending: profile.gemini_copy_pending ?? false,
+            selection: profile.selection_profile ?? null,
         };
+
+        console.info('[Mood Sync] 실제 선곡 프로필', status.selection);
 
         if (status.pending) {
             console.info('[Mood Sync] fallback 결과를 먼저 표시하고 Gemini 이유를 생성 중입니다', status);

@@ -34,6 +34,8 @@ from app.services.mood_service import (
 from app.services.recommendation_knowledge_base import build_recommendation_guidance, retrieve_recommendation_context
 from app.services.spotify_service import (
     _enforce_korean_band_rock_selection,
+    _is_korean_band_rock_track,
+    _korean_band_rock_preference_strength,
     _split_context,
     build_recommendation_message,
     build_track_reason,
@@ -68,6 +70,7 @@ class RecommendationWorkflowState(TypedDict, total=False):
     llm_context: str
     context_snapshot: dict[str, Any]
     generation_profile: dict[str, Any]
+    selection_profile: dict[str, Any]
     access_token: str
     tracks: list[TrackSummary]
     recommendation_copy: dict[str, Any] | None
@@ -598,9 +601,17 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
     # accidentally return an unverified track for an explicit hard request.
     tracks = validate_hard_constraints(tracks, state["payload"].text)
     tracks = _enforce_korean_band_rock_selection(tracks, state["payload"].text, 6)
+    korean_band_rock_preference = _korean_band_rock_preference_strength(state["payload"].text)
+    exact_korean_band_rock_tracks = [track for track in tracks if _is_korean_band_rock_track(track)]
     return {
         "access_token": access_token,
         "tracks": tracks,
+        "selection_profile": {
+            "korean_band_rock_preference": korean_band_rock_preference,
+            "korean_band_rock_exact_count": len(exact_korean_band_rock_tracks),
+            "non_matching_track_count": len(tracks) - len(exact_korean_band_rock_tracks),
+            "selected_track_titles": [track.display_title or track.name for track in tracks],
+        },
     }
 
 
@@ -654,6 +665,7 @@ def _compose_copy_and_track_reasons(state: RecommendationWorkflowState) -> dict[
             "gemini_copy_error": gemini_copy_error,
             "gemini_copy_pending": bool(state.get("defer_gemini_copy")),
             "reason_source": "gemini" if reason_map else "fallback",
+            "selection_profile": state.get("selection_profile") or {},
         },
     }
 
