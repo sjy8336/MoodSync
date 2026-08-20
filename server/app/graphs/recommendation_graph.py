@@ -261,6 +261,12 @@ def _uses_repetitive_or_abstract_language(reason: str) -> bool:
         "포근하게 이어",
         "마음에 스며",
         "깊은 결",
+        "차분한 결",
+        "음악의 결",
+        "분위기의 결",
+        "흐름이 담겨",
+        "연주곡 흐름",
+        "구성되어 있어",
         "깊이감을 더해",
         "포근하게 펼쳐",
         "자연스럽게 스며",
@@ -637,6 +643,8 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
         context_text=state["payload"].text,
         selection_guidance=state.get("selection_guidance"),
     )
+    retrieved_candidate_count = len(tracks)
+    ranked_candidate_count = len(tracks)
     # Repeat the validation at the workflow boundary so later changes cannot
     # accidentally return an unverified track for an explicit hard request.
     selected_count_before_validation = len(tracks)
@@ -663,8 +671,11 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
             "non_matching_track_count": len(tracks) - len(exact_korean_band_rock_tracks),
             "selected_track_titles": [track.display_title or track.name for track in tracks],
             "target_count": 6,
+            "retrieved_candidate_count": retrieved_candidate_count,
+            "ranked_candidate_count": ranked_candidate_count,
             "selected_tracks_before_validation_count": selected_count_before_validation,
             "selected_tracks_after_validation_count": selected_count_after_validation,
+            "refill_count": max(0, len(tracks) - selected_count_after_validation),
             "final_rendered_track_count": len(tracks),
         },
     }
@@ -714,11 +725,15 @@ def _compose_copy_and_track_reasons(state: RecommendationWorkflowState) -> dict[
             "has_rag_context": bool(state.get("rag_context")),
             "has_selected_vibes": bool(state.get("selected_vibes")),
             "track_count": len(enriched_tracks),
+            "tracks_sent_to_reason_generator": len(tracks),
             "gemini_copy_attempted": gemini_copy_attempted,
             "gemini_copy_succeeded": bool(recommendation_copy),
             "gemini_reason_count": len(reason_map),
             "parsed_reason_count": len(reason_map),
             "fallback_reason_used": len(reason_map) < len(enriched_tracks),
+            "fallback_reason_count": len(enriched_tracks) - len(reason_map),
+            "final_track_count": len(enriched_tracks),
+            "rendered_card_count": len(enriched_tracks),
             "gemini_copy_error": gemini_copy_error,
             "gemini_copy_pending": bool(state.get("defer_gemini_copy")),
             "reason_source": "gemini" if reason_map else "fallback",
@@ -808,6 +823,10 @@ def complete_recommendation_copy(recommendation_id: int) -> None:
                 "gemini_copy_attempted": True,
                 "gemini_copy_succeeded": bool(recommendation_copy),
                 "gemini_reason_count": len(reason_map),
+                "parsed_reason_count": len(reason_map),
+                "fallback_reason_count": len(enriched_tracks) - len(reason_map),
+                "final_track_count": len(enriched_tracks),
+                "rendered_card_count": len(enriched_tracks),
                 "gemini_copy_error": copy_error,
                 "reason_source": "gemini" if reason_map else "fallback",
             }
