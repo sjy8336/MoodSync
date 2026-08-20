@@ -149,6 +149,20 @@ class GeminiRecommendationCopyTests(unittest.TestCase):
         self.assertTrue(all("피아노와 색소폰" not in reason for reason in reasons))
         self.assertTrue(all(track.reason_facts.get("jazz_ranking_factors") for track in tracks))
 
+    def test_jazz_rhythm_intensity_is_separate_from_low_stimulation(self) -> None:
+        text = (
+            "오늘은 조금 지쳐서 재즈를 듣고 싶어요. 너무 자극적이지 않고, "
+            "피아노와 색소폰이 천천히 흐르면서 긴장을 풀어주는 곡이면 좋겠어요."
+        )
+        tracks = recommend_tracks("tired", context_text=text)
+        facts_by_name = {track.name: track.reason_facts for track in tracks}
+
+        high_rhythm_tracks = [
+            facts for facts in facts_by_name.values() if facts.get("rhythmic_intensity") == "high"
+        ]
+        self.assertTrue(all(not facts.get("low_stimulation_fit") for facts in high_rhythm_tracks))
+        self.assertEqual(facts_by_name["Blue Bossa"].get("rhythmic_intensity"), "moderate")
+
     def test_korean_band_rock_request_prefers_verified_local_band_catalog(self) -> None:
         text = "오늘 너무 화나는 일이 있었어서 스트레스 풀고 싶어. 우리나라 밴드 락음악 위주로 추천해줘."
         catalog = _select_fallback_catalog("angry", text, 6)

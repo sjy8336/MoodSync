@@ -424,8 +424,14 @@ def _build_contextual_reason_facts(name: str, artist_name: str, context_text: st
             facts["sleep_ranking_factors"] = factors
     if _is_calm_jazz_instrument_request(context_text):
         tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
-        facts["low_stimulation_fit"] = bool(tags & {"low_stimulation", "relaxed", "subdued"})
-        facts["relaxed_flow_fit"] = bool("relaxed" in tags or "low_stimulation" in tags)
+        facts["rhythmic_intensity"] = (
+            "high" if tags & {"rhythmic_strong", "hard-bop", "bebop", "fusion", "swing", "big-band", "odd_meter"}
+            else "moderate" if tags & {"rhythmic_light", "groove", "bossa-nova"}
+            else "low"
+        )
+        facts["low_stimulation_fit"] = bool(tags & {"low_stimulation", "relaxed", "subdued"}) and facts["rhythmic_intensity"] != "high"
+        facts["relaxed_fit"] = bool("relaxed" in tags or "low_stimulation" in tags)
+        facts["relaxed_flow_fit"] = facts["relaxed_fit"] and facts["rhythmic_intensity"] != "high"
         facts["calm_fit"] = bool("calm" in {str(mood).lower() for mood in facts.get("moods", []) if mood} or "calm" in tags)
         facts["jazz_ranking_factors"] = [
             label
@@ -581,12 +587,14 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "Lose Yourself", "artist_name": "Eminem", "moods": ["anxious", "focused", "angry"], "tags": ["driving", "focused"]},
     {"name": "Bad Habit", "artist_name": "Steve Lacy", "moods": ["lonely", "sad", "focused"], "tags": ["rnb", "groove"]},
     {"name": "Luv (sic) Part 3", "artist_name": "Nujabes", "moods": ["lonely", "sad", "focused"], "tags": ["emotional", "hip-hop"]},
-    {"name": "Take Five", "artist_name": "The Dave Brubeck Quartet", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "rhythmic_strong"], "instrument_source": "curated_catalog_metadata"},
-    {"name": "So What", "artist_name": "Miles Davis", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed", "rhythmic_light", "groove"], "instrument_source": "curated_catalog_metadata"},
-    {"name": "Blue in Green", "artist_name": "Miles Davis", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Take Five", "artist_name": "The Dave Brubeck Quartet", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "rhythmic_strong", "odd_meter"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "So What", "artist_name": "Miles Davis", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "modal", "piano", "saxophone", "relaxed", "rhythmic_light", "groove"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Blue in Green", "artist_name": "Miles Davis", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "modal", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Autumn Leaves", "artist_name": "Chet Baker", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "vocal-jazz", "standard"]},
     {"name": "My Favorite Things", "artist_name": "John Coltrane", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "relaxed", "rhythmic_strong"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Round Midnight", "artist_name": "Thelonious Monk", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Naima", "artist_name": "John Coltrane", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "In a Sentimental Mood", "artist_name": "John Coltrane & Duke Ellington", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone", "low_stimulation", "relaxed"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Sing, Sing, Sing", "artist_name": "Benny Goodman", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "swing", "big-band", "instrumental"]},
     {"name": "Take the A Train", "artist_name": "Duke Ellington", "moods": ["happy", "focused", "calm"], "tags": ["jazz", "swing", "standard", "big-band"]},
     {"name": "It Don't Mean a Thing", "artist_name": "Duke Ellington", "moods": ["happy", "excited", "focused"], "tags": ["jazz", "swing", "standard", "big-band"]},
@@ -870,8 +878,10 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
                 "feature_provenance": facts.get("feature_provenance", {}),
             },
             "low_stimulation_fit": facts.get("low_stimulation_fit"),
+            "relaxed_fit": facts.get("relaxed_fit"),
             "relaxed_flow_fit": facts.get("relaxed_flow_fit"),
             "calm_fit": facts.get("calm_fit"),
+            "rhythmic_intensity": facts.get("rhythmic_intensity"),
             "mellow_fit": facts.get("mellow_fit"),
             "light_rhythm_fit": facts.get("light_rhythm_fit"),
             "long_session_fit": facts.get("long_session_fit"),
@@ -1395,12 +1405,15 @@ def build_recommendation_message(
             and {"piano", "saxophone"}.issubset(set(facts.get("recording_instruments") or []))
             for facts in track_facts
         )
+        high_rhythm_count = sum(facts.get("rhythmic_intensity") == "high" for facts in track_facts)
+        moderate_rhythm_count = sum(facts.get("rhythmic_intensity") == "moderate" for facts in track_facts)
         if all_jazz and verified_piano_sax_count >= max(1, len(track_facts) // 2):
             return (
                 "오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 골라봤어요. "
-                "피아노와 색소폰이 실제 녹음 정보로 확인되는 곡들을 중심으로 담았어요."
+                f"피아노와 색소폰이 실제 녹음 정보로 확인된 곡을 중심으로, {'리듬감이 더 뚜렷한 곡도 일부' if high_rhythm_count or moderate_rhythm_count else '느긋한 연주를'} 함께 담았어요."
             )
-        return "오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 중심으로 골라봤어요. 실제 녹음의 악기 정보가 확인되지 않은 곡은 악기를 추정하지 않았어요."
+        rhythm_clause = "리듬감이 더 뚜렷한 곡은 일부만 포함하는 방식으로" if high_rhythm_count or moderate_rhythm_count else "느긋한 연주를 중심으로"
+        return f"오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 중심으로 골라봤어요. {rhythm_clause} 구성했고, 실제 녹음의 악기 정보가 확인되지 않은 곡은 악기를 추정하지 않았어요."
 
     if study_flow_request and avoids_overstimulation:
         return "지금의 좋은 집중 흐름은 유지하면서도 너무 과하지 않게 활기를 더할 수 있는 곡들을 골라봤어요."
@@ -1530,6 +1543,9 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
         "긴 청취에 맞추기": "오래 이어 들어도 강한 자극을 피하고 싶을 때 어울려요.",
         "차분한 배경으로 이어 듣기": "음악이 앞에 나서지 않는 분위기로 오래 듣고 싶을 때 잘 맞아요.",
         "집중 흐름에 무리 없이 맞추기": "차분한 음악을 오래 이어 듣고 싶을 때 잘 맞아요.",
+        "리듬 변화 듣기": "차분한 곡들 사이에서 리듬이 조금 더 있는 재즈를 듣고 싶을 때 잘 맞아요.",
+        "재즈의 박자감 느끼기": "느긋한 곡만 이어지지 않도록 박자감에 작은 변화를 주고 싶을 때 잘 어울려요.",
+        "가벼운 재즈 리듬 더하기": "차분한 분위기를 유지하면서 가벼운 리듬을 더하고 싶을 때 잘 맞아요.",
         "지친 상태에서 차분한 재즈 듣기": "오늘 조금 지친 상태에서 자극적인 음악보다 차분하게 듣고 싶을 때 잘 맞아요.",
         "피아노와 색소폰의 흐름 듣기": "피아노와 색소폰 연주를 천천히 듣고 싶을 때 잘 어울려요.",
         "낮은 강도의 연주 선택": "강한 자극보다 느긋한 재즈를 찾을 때 듣기 좋아요.",
@@ -1706,13 +1722,15 @@ def _jazz_instrument_feature_sentence(track_facts: dict[str, object]) -> str | N
 def _jazz_catalog_feature_sentence(tags: set[str]) -> str | None:
     """Describe only catalog-level genre/mood facts when recording instruments are unknown."""
     if "bossa-nova" in tags:
-        return "보사노바 계열의 여유 있는 재즈 분위기가 이어지는 곡이에요."
+        return "보사노바 계열의 가벼운 리듬이 있는 재즈 연주곡이에요."
+    if "odd_meter" in tags:
+        return "독특한 박자감이 또렷한 재즈 연주곡이에요."
     if "hard-bop" in tags:
         return "하드 밥 계열의 리듬감이 분명한 재즈 곡이에요."
     if "low_stimulation" in tags and "relaxed" in tags:
-        return "차분하고 여유 있는 재즈 분위기가 이어지는 곡이에요."
+        return "차분한 분위기의 재즈 연주곡이에요."
     if "relaxed" in tags:
-        return "여유 있는 흐름의 재즈 연주곡이에요."
+        return "느긋한 분위기의 재즈 연주곡이에요."
     if "jazz" in tags:
         return "재즈 연주가 중심인 곡이에요."
     return None

@@ -689,6 +689,8 @@ def _load_tracks(state: RecommendationWorkflowState) -> dict[str, Any]:
         "calm_coverage": sum(bool(facts.get("calm_fit")) for facts in track_facts),
         "mellow_coverage": sum(bool(facts.get("mellow_fit")) for facts in track_facts),
         "light_rhythm_coverage": sum(bool(facts.get("light_rhythm_fit")) for facts in track_facts),
+        "higher_rhythm_count": sum(facts.get("rhythmic_intensity") == "high" for facts in track_facts),
+        "relaxed_coverage": sum(bool(facts.get("relaxed_fit")) for facts in track_facts),
         "high_distraction_count": sum(facts.get("distraction_risk") == "high" for facts in track_facts),
         "prominent_vocal_count": sum("prominent_vocal" in set(facts.get("tags", [])) for facts in track_facts),
         "high_intensity_count": sum(

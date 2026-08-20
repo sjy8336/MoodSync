@@ -104,6 +104,11 @@ _CALM_JAZZ_ROLES = [
     ("재즈의 여백 즐기기", "피아노와 색소폰이 어우러지는 흐름을 부담 없이 듣고 싶을 때"),
 ]
 
+_CALM_JAZZ_RHYTHMIC_ROLES = [
+    ("리듬 변화 듣기", "차분한 곡들 사이에서 리듬이 조금 더 있는 재즈를 듣고 싶을 때"),
+    ("재즈의 박자감 느끼기", "느긋한 곡만 이어지지 않도록 박자감에 작은 변화를 주고 싶을 때"),
+]
+
 _CATHARTIC_KOREAN_ROCK_ROLES = [
     ("답답한 기분 강하게 환기하기", "답답한 기분을 강한 음악으로 환기하고 싶을 때"),
     ("분노의 에너지와 맞추기", "화가 아직 가라앉지 않았을 때 강한 분위기의 음악을 듣고 싶다면"),
@@ -621,7 +626,14 @@ def _recommendation_role(
                 _LONG_FOCUS_ROLES[7],
             ]
     elif is_calm_jazz_context:
-        roles = _CALM_JAZZ_ROLES
+        raw_tags = reason_facts.get("tags", []) if isinstance(reason_facts, dict) else []
+        tags = {str(tag).strip().lower() for tag in raw_tags if str(tag).strip()}
+        if tags & {"rhythmic_strong", "odd_meter", "hard-bop", "bebop", "fusion", "swing", "big-band"}:
+            roles = [_CALM_JAZZ_RHYTHMIC_ROLES[index % len(_CALM_JAZZ_RHYTHMIC_ROLES)]]
+        elif tags & {"rhythmic_light", "groove", "bossa-nova"}:
+            roles = [("가벼운 재즈 리듬 더하기", "차분한 분위기를 유지하면서 가벼운 리듬을 더하고 싶을 때")]
+        else:
+            roles = _CALM_JAZZ_ROLES
     elif has_study_flow:
         roles = _STUDY_FLOW_ROLES
     else:
