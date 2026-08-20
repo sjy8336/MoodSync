@@ -174,11 +174,11 @@ const TODAY_MOOD_RECORDED = {
 
 
 const MOOD_STYLE_MAP = {
-    happy: { label: '기쁨', icon: I.smile, color: '#FF6B5E', soft: '#FFEAE6' },
-    excited: { label: '설렘', icon: I.sparkle, color: '#FFB648', soft: '#FFF3DE' },
-    calm: { label: '평온', icon: I.cloud, color: '#9B8FD4', soft: '#EDEAFC' },
+    happy: { label: '기쁨', icon: I.smile, color: '#9C3D33', soft: '#FFEAE6' },
+    excited: { label: '설렘', icon: I.sparkle, color: '#B9791E', soft: '#FFF3DE' },
+    calm: { label: '평온', icon: I.cloud, color: '#6E6678', soft: '#F1ECE3' },
     tired: { label: '피곤', icon: I.moon, color: '#6E6678', soft: '#F1ECE3' },
-    sad: { label: '우울', icon: I.rain, color: '#7B7FF0', soft: '#ECEDFD' },
+    sad: { label: '우울', icon: I.rain, color: '#3D3D8F', soft: '#ECEDFD' },
     anxious: { label: '불안', icon: I.alertCirc, color: '#C97EB6', soft: '#FAEAF7' },
     angry: { label: '화남', icon: I.flame, color: '#FF6B5E', soft: '#FFEAE6' },
     lonely: { label: '외로움', icon: I.droplets, color: '#7B7FF0', soft: '#ECEDFD' },
@@ -246,6 +246,14 @@ const getMoodTintSoftClass = (soft) => {
 
 const getTrackMoodChipClass = (color) => {
     switch (color) {
+        case '#9C3D33':
+            return 'bg-[#FFEAE6] text-[#9C3D33]';
+        case '#B9791E':
+            return 'bg-[#FFF3DE] text-[#B9791E]';
+        case '#3D3D8F':
+            return 'bg-[#ECEDFD] text-[#3D3D8F]';
+        case '#6E6678':
+            return 'bg-[#F1ECE3] text-[#6E6678]';
         case '#FF6B5E':
             return 'bg-[rgba(255,107,94,0.11)] text-[#FF6B5E]';
         case '#FFB648':

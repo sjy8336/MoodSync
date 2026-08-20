@@ -6,7 +6,6 @@ import FavoriteToast from '../components/FavoriteToast';
 import { getMoodHistory, deleteMoodHistory, getFavorites, saveFavorite, removeFavorite } from '../services/apiClient';
 import { useAuth } from '../contexts/AuthContext';
 
-
 const Ic = ({ d, size = 20, color = 'currentColor', fill = 'none', sw = 1.8, className = '' }) => (
     <svg
         width={size}
@@ -56,7 +55,6 @@ const I = {
     ],
 };
 
-
 const SpotifyMark = ({ size = 16 }) => (
     <svg width={size} height={size} viewBox="0 0 24 24" className="inline-block shrink-0">
         <circle cx="12" cy="12" r="12" fill="#1ED760" />
@@ -66,7 +64,6 @@ const SpotifyMark = ({ size = 16 }) => (
         />
     </svg>
 );
-
 
 const useBreakpoint = () => {
     const [bp, setBp] = useState('desktop');
@@ -82,7 +79,6 @@ const useBreakpoint = () => {
     return bp;
 };
 
-
 const VIBE_PATTERN = /\s*원하는\s*분위기\s*:\s*([^.]*)\.?\s*$/;
 
 const parseInputNote = (rawNote) => {
@@ -97,13 +93,12 @@ const parseInputNote = (rawNote) => {
     return { freeText, vibes };
 };
 
-
 const MOOD_MAP = {
-    happy: { label: '기쁨', color: '#FF6B5E', soft: '#FFEAE6' },
-    excited: { label: '설렘', color: '#FFB648', soft: '#FFF3DE' },
-    sad: { label: '우울', color: '#7B7FF0', soft: '#ECEDFD' },
+    happy: { label: '기쁨', color: '#9C3D33', soft: '#FFEAE6' },
+    excited: { label: '설렘', color: '#B9791E', soft: '#FFF3DE' },
+    sad: { label: '우울', color: '#3D3D8F', soft: '#ECEDFD' },
     lonely: { label: '외로움', color: '#7B7FF0', soft: '#ECEDFD' },
-    calm: { label: '평온', color: '#9B8FD4', soft: '#EDEAFC' },
+    calm: { label: '평온', color: '#6E6678', soft: '#F1ECE3' },
     tired: { label: '피로', color: '#7B7FF0', soft: '#ECEDFD' },
     angry: { label: '분노', color: '#FF6B5E', soft: '#FFEAE6' },
     anxious: { label: '불안', color: '#7B7FF0', soft: '#ECEDFD' },
@@ -119,6 +114,14 @@ const getMoodTheme = (mood) => {
 
 const getThemeBgClass = (color) => {
     switch (color) {
+        case '#9C3D33':
+            return 'bg-[#9C3D33]';
+        case '#B9791E':
+            return 'bg-[#B9791E]';
+        case '#3D3D8F':
+            return 'bg-[#3D3D8F]';
+        case '#6E6678':
+            return 'bg-[#6E6678]';
         case '#FF6B5E':
             return 'bg-[#FF6B5E]';
         case '#FFB648':
@@ -140,6 +143,14 @@ const getThemeBgClass = (color) => {
 
 const getThemeTextClass = (color) => {
     switch (color) {
+        case '#9C3D33':
+            return 'text-[#9C3D33]';
+        case '#B9791E':
+            return 'text-[#B9791E]';
+        case '#3D3D8F':
+            return 'text-[#3D3D8F]';
+        case '#6E6678':
+            return 'text-[#6E6678]';
         case '#FF6B5E':
             return 'text-[#FF6B5E]';
         case '#FFB648':
@@ -214,7 +225,6 @@ const getProgressWidthClass = (count) => {
     }
 };
 
-
 const pad2 = (n) => String(n).padStart(2, '0');
 const toKey = (y, m, d) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
 const WEEKDAYS = ['월', '화', '수', '목', '금', '토', '일'];
@@ -238,7 +248,6 @@ const formatShortDate = (dateStr) => {
     return parts.length !== 3 ? dateStr : `${parts[1]}.${parts[2]}`;
 };
 
-
 const formatRecentHeading = (dateKey) => {
     if (!dateKey) return '기록';
     const [y, m, d] = dateKey.split('-').map(Number);
@@ -247,9 +256,7 @@ const formatRecentHeading = (dateKey) => {
     return `${String(y).slice(2)}년 ${m}월 ${d}일 기록`;
 };
 
-
 const getTrackId = (track) => track?.track_id || `${track?.name || ''}-${track?.artist_name || ''}`;
-
 
 const buildDummyRecords = (year, month) => {
     const dummyTracks = [
@@ -337,10 +344,8 @@ const buildDummyRecords = (year, month) => {
     }));
 };
 
-
 const ensureRecordIds = (list) =>
     (list || []).map((r, idx) => ({ ...r, id: r.id || r.record_id || `${r.date}-${idx}` }));
-
 
 function SummaryCard({ icon, iconBg, iconColor, label, value, valueColor }) {
     return (
@@ -361,7 +366,6 @@ function SummaryCard({ icon, iconBg, iconColor, label, value, valueColor }) {
         </div>
     );
 }
-
 
 const MONTH_LABELS = ['1월', '2월', '3월', '4월', '5월', '6월', '7월', '8월', '9월', '10월', '11월', '12월'];
 
@@ -415,7 +419,6 @@ function YearMonthPicker({ year, month, onChange, onClose }) {
     );
 }
 
-
 function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, recordsByDate, selectedDate, onSelectDate }) {
     const grid = useMemo(() => buildCalendarGrid(year, month), [year, month]);
     const todayKey = toKey(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
@@ -430,7 +433,6 @@ function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, records
 
     return (
         <div className="bg-white border border-[#E5DFD3] rounded-3xl p-5 sm:p-6">
-
             <div className="relative mb-6">
                 <div className="flex items-center justify-between">
                     <button
@@ -472,7 +474,6 @@ function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, records
                 )}
             </div>
 
-
             <div className="grid grid-cols-7 mb-1">
                 {WEEKDAYS.map((w) => (
                     <div key={w} className="text-center text-[11px] font-semibold text-[#A39CAC] py-1">
@@ -480,7 +481,6 @@ function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, records
                     </div>
                 ))}
             </div>
-
 
             <div className="grid grid-cols-7 gap-x-[2px] gap-y-[2px]">
                 {grid.flat().map((day, idx) => {
@@ -529,14 +529,21 @@ function MoodCalendar({ year, month, onPrevMonth, onNextMonth, onJumpTo, records
     );
 }
 
-
-function AlbumCover({ track, className = '', roundedClass = 'rounded-[10px]', iconSize = 12 }) {
+function AlbumCover({ track, className = '', roundedClass = 'rounded-[10px]', iconSize = 12, theme }) {
     const [imageFailed, setImageFailed] = useState(false);
     const hasAlbumImage = Boolean(track?.album_image_url) && !imageFailed;
+    const activeTheme = theme || DEFAULT_THEME;
 
     return (
         <div
-            className={`shrink-0 overflow-hidden bg-[linear-gradient(135deg,#FFEAE6_0%,#ECEDFD_55%,#FFF3DE_100%)] ${roundedClass} ${className}`}
+            className={`relative shrink-0 overflow-hidden ${roundedClass} ${className}`}
+            style={
+                hasAlbumImage
+                    ? undefined
+                    : {
+                          backgroundImage: `linear-gradient(135deg, ${activeTheme.soft} 0%, ${activeTheme.color}33 55%, ${activeTheme.soft} 100%)`,
+                      }
+            }
         >
             {hasAlbumImage ? (
                 <img
@@ -546,20 +553,23 @@ function AlbumCover({ track, className = '', roundedClass = 'rounded-[10px]', ic
                     className="block h-full w-full object-cover"
                 />
             ) : (
-                <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 p-1.5 text-center">
-                    <Ic d={I.music} size={iconSize} color="#A39CAC" />
-                    <span className="line-clamp-2 overflow-hidden text-ellipsis text-[10px] font-bold leading-[1.1] text-[#6E6678]">
-                        {track.album_name || track.name}
-                    </span>
-                </div>
+                <>
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(255,255,255,0.52)_0%,transparent_36%),radial-gradient(circle_at_75%_70%,rgba(255,255,255,0.32)_0%,transparent_40%)]" />
+                    <div className="relative z-10 flex h-full w-full flex-col items-center justify-center gap-0.5 p-1.5 text-center">
+                        <Ic d={I.music} size={iconSize} color="#A39CAC" />
+                        <span className="line-clamp-2 overflow-hidden text-ellipsis text-[10px] font-bold leading-[1.1] text-[#6E6678]">
+                            {track.album_name || track.name}
+                        </span>
+                    </div>
+                </>
             )}
         </div>
     );
 }
 
-
-function TrackRow({ track, index, mood, liked, onToggleLike }) {
+function TrackRow({ track, index, mood, liked, onToggleLike, theme }) {
     const trackId = getTrackId(track);
+    const activeTheme = theme || DEFAULT_THEME;
 
     const handleLikeClick = (e) => {
         e.preventDefault();
@@ -568,8 +578,10 @@ function TrackRow({ track, index, mood, liked, onToggleLike }) {
     };
 
     return (
-        <div className="flex items-center gap-3 py-2">
-            <span className="text-[11px] font-bold text-[#A39CAC] w-4 shrink-0 text-center">
+        <div className="flex items-start gap-3 py-3">
+            <span
+                className={`mt-[3px] flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold tabular-nums ${getThemeSoftClass(activeTheme.soft)} ${getThemeTextClass(activeTheme.color)}`}
+            >
                 {String(index + 1).padStart(2, '0')}
             </span>
             <a
@@ -579,7 +591,13 @@ function TrackRow({ track, index, mood, liked, onToggleLike }) {
                 className="block shrink-0 rounded-[10px] overflow-hidden leading-none"
                 aria-label={`${track.name} Spotify에서 열기`}
             >
-                <AlbumCover track={track} className="w-10 h-10" roundedClass="rounded-[10px]" iconSize={12} />
+                <AlbumCover
+                    track={track}
+                    className="w-10 h-10"
+                    roundedClass="rounded-[10px]"
+                    iconSize={12}
+                    theme={activeTheme}
+                />
             </a>
             <div className="flex-1 min-w-0">
                 <a
@@ -598,8 +616,8 @@ function TrackRow({ track, index, mood, liked, onToggleLike }) {
                 >
                     {track.artist_name}
                 </a>
+                {track.reason && <p className="mt-1 text-[12px] leading-[1.55] text-[#6E6678]">{track.reason}</p>}
             </div>
-
 
             <div className="flex items-center gap-1.5 shrink-0">
                 <button
@@ -626,7 +644,6 @@ function TrackRow({ track, index, mood, liked, onToggleLike }) {
         </div>
     );
 }
-
 
 function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
     const [expanded, setExpanded] = useState(false);
@@ -683,7 +700,6 @@ function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
                 )}
             </div>
 
-
             <div className="mb-5">
                 <p className="text-[11px] font-semibold text-[#A39CAC] uppercase tracking-[0.06em] mb-2">선택한 감정</p>
                 <span
@@ -692,7 +708,6 @@ function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
                     {theme.label}
                 </span>
             </div>
-
 
             {hasVibes && (
                 <div className="mb-5">
@@ -712,7 +727,6 @@ function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
                 </div>
             )}
 
-
             {hasFreeText && (
                 <div className="mb-5">
                     <p className="text-[11px] font-semibold text-[#A39CAC] uppercase tracking-[0.06em] mb-2">
@@ -730,7 +744,6 @@ function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
                 <p className="text-[12.5px] text-[#A39CAC] leading-relaxed mb-5">감정 선택만으로 추천했어요.</p>
             )}
 
-
             {trackCount > 0 && (
                 <div className="border-t border-[#E5DFD3] pt-4">
                     <div className="flex items-center justify-between mb-3">
@@ -740,7 +753,7 @@ function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
                     </div>
 
                     {!expanded && representativeTrack && (
-                        <div className="flex items-center gap-3 mb-4">
+                        <div className="flex items-start gap-3 mb-4">
                             <a
                                 href={representativeTrack.spotify_url}
                                 target="_blank"
@@ -752,6 +765,7 @@ function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
                                     className="w-11 h-11"
                                     roundedClass="rounded-[10px]"
                                     iconSize={13}
+                                    theme={theme}
                                 />
                             </a>
                             <div className="min-w-0 flex-1">
@@ -764,6 +778,11 @@ function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
                                     {representativeTrack.name}
                                 </a>
                                 <p className="text-[12px] text-[#6E6678] truncate">{representativeTrack.artist_name}</p>
+                                {representativeTrack.reason && (
+                                    <p className="mt-1 text-[12px] leading-[1.55] text-[#6E6678] line-clamp-2">
+                                        {representativeTrack.reason}
+                                    </p>
+                                )}
                             </div>
                         </div>
                     )}
@@ -778,6 +797,7 @@ function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
                                     mood={record.mood}
                                     liked={favoriteIds?.has(getTrackId(track))}
                                     onToggleLike={onToggleLike}
+                                    theme={theme}
                                 />
                             ))}
                         </div>
@@ -801,7 +821,6 @@ function SelectedDayPanel({ dateKey, records, favoriteIds, onToggleLike }) {
     );
 }
 
-
 function DateRecordCard({ record, isExpanded, onToggle, onDelete, favoriteIds, onToggleLike }) {
     const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -816,8 +835,10 @@ function DateRecordCard({ record, isExpanded, onToggle, onDelete, favoriteIds, o
 
     return (
         <div
-            className={`bg-white border rounded-2xl overflow-hidden transition-colors ${
-                isExpanded ? 'border-[#211C26]' : 'border-[#E5DFD3] hover:border-[#D6CFC1]'
+            className={`bg-white border rounded-2xl overflow-hidden transition-all duration-200 ${
+                isExpanded
+                    ? 'border-[#211C26] shadow-[0_16px_40px_-20px_rgba(33,28,38,0.18)]'
+                    : 'border-[#E5DFD3] hover:border-[#D6CFC1] hover:-translate-y-px hover:shadow-[0_10px_28px_-18px_rgba(33,28,38,0.14)]'
             }`}
         >
             <div className="flex items-center gap-2 px-4 py-4 sm:px-5">
@@ -879,18 +900,24 @@ function DateRecordCard({ record, isExpanded, onToggle, onDelete, favoriteIds, o
                         <p className="text-[12.5px] leading-relaxed text-[#6E6678] mb-3">{freeText}</p>
                     )}
                     {trackCount > 0 ? (
-                        <div className="flex flex-col divide-y divide-[#F1ECE3]">
-                            {record.tracks.map((track, idx) => (
-                                <TrackRow
-                                    key={getTrackId(track) || idx}
-                                    track={track}
-                                    index={idx}
-                                    mood={record.mood}
-                                    liked={favoriteIds?.has(getTrackId(track))}
-                                    onToggleLike={onToggleLike}
-                                />
-                            ))}
-                        </div>
+                        <>
+                            <p className="mb-1 text-[11px] font-bold text-[#A39CAC] uppercase tracking-[0.06em]">
+                                왜 이 곡들일까요
+                            </p>
+                            <div className="flex flex-col divide-y divide-[#F1ECE3]">
+                                {record.tracks.map((track, idx) => (
+                                    <TrackRow
+                                        key={getTrackId(track) || idx}
+                                        track={track}
+                                        index={idx}
+                                        mood={record.mood}
+                                        liked={favoriteIds?.has(getTrackId(track))}
+                                        onToggleLike={onToggleLike}
+                                        theme={theme}
+                                    />
+                                ))}
+                            </div>
+                        </>
                     ) : (
                         <p className="text-[12.5px] text-[#A39CAC]">추천된 음악이 없어요.</p>
                     )}
@@ -904,7 +931,6 @@ function DateRecordCard({ record, isExpanded, onToggle, onDelete, favoriteIds, o
     );
 }
 
-
 export default function HistoryPage() {
     const { user } = useAuth();
     const bp = useBreakpoint();
@@ -912,12 +938,13 @@ export default function HistoryPage() {
     const isTablet = bp === 'tablet';
     const isDemoUser = user?.auth_provider === 'demo';
     const demoPresetKey = (user?.providerUserId || user?.provider_user_id || '').split(':')[1] || 'focus';
-    const demoPresetLabel = {
-        focus: '집중 테스트',
-        jazz: '재즈 테스트',
-        drive: '드라이브 테스트',
-        dreamy: '몽환 테스트',
-    }[demoPresetKey] || '데모';
+    const demoPresetLabel =
+        {
+            focus: '집중 테스트',
+            jazz: '재즈 테스트',
+            drive: '드라이브 테스트',
+            dreamy: '몽환 테스트',
+        }[demoPresetKey] || '데모';
 
     const now = new Date();
     const [year, setYear] = useState(now.getFullYear());
@@ -928,7 +955,6 @@ export default function HistoryPage() {
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState('');
     const [expandedId, setExpandedId] = useState(null);
-
 
     const [favoriteIds, setFavoriteIds] = useState(new Set());
     const [toastVisible, setToastVisible] = useState(false);
@@ -962,7 +988,6 @@ export default function HistoryPage() {
     useEffect(() => {
         setExpandedId(null);
     }, [selectedDate]);
-
 
     useEffect(() => {
         let active = true;
@@ -1116,7 +1141,6 @@ export default function HistoryPage() {
 
             <main className={`relative ${isMobile ? 'pt-[100px] pb-[72px]' : 'pt-[132px] pb-[120px]'} ${wrapCls}`}>
                 <div className="max-w-[1240px] mx-auto">
-
                     <div className={`fu mb-12 ${getDelayClass(0.05)}`}>
                         <span className="inline-flex items-center gap-[6px] text-[12px] font-semibold text-[#6E6678] bg-white border border-[#E5DFD3] px-[14px] py-[6px] rounded-full mb-4">
                             <Ic d={I.calHeart} size={13} color="#FF6B5E" />
@@ -1154,7 +1178,7 @@ export default function HistoryPage() {
                                         기록이 미리 들어 있어요
                                     </h2>
                                     <p className="mt-1.5 max-w-[620px] text-[13.5px] leading-[1.7] text-[#4B4FD0]">
-                                        날짜를 눌러 샘플 감정 흐름과 추천 결과를 바로 확인할 수 있어요. <br/>
+                                        날짜를 눌러 샘플 감정 흐름과 추천 결과를 바로 확인할 수 있어요. <br />
                                         캘린더, 감정 분포, 최근 추천 카드까지 실제처럼 테스트해보세요.
                                     </p>
                                 </div>
@@ -1176,7 +1200,6 @@ export default function HistoryPage() {
                             </div>
                         </div>
                     )}
-
 
                     <div className={`fu mb-5 ${getDelayClass(0.08)}`}>
                         <span className="inline-flex items-center gap-[6px] text-[12px] font-bold text-[#FF6B5E] uppercase tracking-[0.06em]">
@@ -1247,7 +1270,6 @@ export default function HistoryPage() {
                         </div>
                     )}
 
-
                     <div className={`fu mb-5 ${getDelayClass(0.13)}`}>
                         <span className="inline-flex items-center gap-[6px] text-[12px] font-bold text-[#7B7FF0] uppercase tracking-[0.06em]">
                             <Ic d={I.calHeart} size={13} color="#7B7FF0" />
@@ -1276,7 +1298,6 @@ export default function HistoryPage() {
                             onToggleLike={handleToggleLike}
                         />
                     </div>
-
 
                     <div className={`fu ${getDelayClass(0.22)}`}>
                         <div className="flex items-center justify-between mb-5">

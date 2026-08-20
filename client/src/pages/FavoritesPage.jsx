@@ -70,12 +70,12 @@ const SpotifyMark = ({ size = 14 }) => (
 
 
 const MOOD_MAP = {
-    happy: { label: '기쁨', icon: I.smile, color: '#FF6B5E', soft: '#FFEAE6' },
-    excited: { label: '설렘', icon: I.sparkle, color: '#FFB648', soft: '#FFF3DE' },
-    sad: { label: '우울', icon: I.rain, color: '#7B7FF0', soft: '#ECEDFD' },
+    happy: { label: '기쁨', icon: I.smile, color: '#9C3D33', soft: '#FFEAE6' },
+    excited: { label: '설렘', icon: I.sparkle, color: '#B9791E', soft: '#FFF3DE' },
+    sad: { label: '우울', icon: I.rain, color: '#3D3D8F', soft: '#ECEDFD' },
     lonely: { label: '외로움', icon: I.moon, color: '#7B7FF0', soft: '#ECEDFD' },
     tired: { label: '피로', icon: I.moon, color: '#6E6678', soft: '#F1ECE3' },
-    calm: { label: '평온', icon: I.cloud, color: '#9B8FD4', soft: '#EDEAFC' },
+    calm: { label: '평온', icon: I.cloud, color: '#6E6678', soft: '#F1ECE3' },
     angry: { label: '분노', icon: I.sparkles, color: '#FF6B5E', soft: '#FFEAE6' },
     anxious: { label: '불안', icon: I.sparkles, color: '#7B7FF0', soft: '#ECEDFD' },
     focused: { label: '집중', icon: I.sparkles, color: '#FFB648', soft: '#FFF3DE' },
@@ -108,6 +108,14 @@ const getSoftBgClass = (soft) => {
 
 const getTextColorClass = (color) => {
     switch (color) {
+        case '#9C3D33':
+            return 'text-[#9C3D33]';
+        case '#B9791E':
+            return 'text-[#B9791E]';
+        case '#3D3D8F':
+            return 'text-[#3D3D8F]';
+        case '#6E6678':
+            return 'text-[#6E6678]';
         case '#FF6B5E':
             return 'text-[#FF6B5E]';
         case '#FFB648':

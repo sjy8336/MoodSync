@@ -48,6 +48,14 @@ INSTRUMENTAL_REQUEST_TERMS = (
 )
 SLEEP_REQUEST_TERMS = ("수면", "잠들", "잠을", "잠 못", "잠자", "자고 싶", "잘 때")
 
+INSTRUMENT_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("피아노", "piano", "keys", "keyboard"), "piano"),
+    (("색소폰", "saxophone", "sax"), "saxophone"),
+    (("기타", "guitar"), "guitar"),
+    (("트럼펫", "trumpet"), "trumpet"),
+    (("바이올린", "violin"), "violin"),
+)
+
 GENRE_FAMILY_HINTS: list[tuple[tuple[str, ...], str, list[str], dict[str, object]]] = [
     (("rnb", "r&b", "알앤비"), "R&B", ["r&b", "r-n-b", "soul", "neo-soul"], {"target_valence": 0.5, "target_energy": 0.58}),
     (("neo soul", "neo-soul", "네오소울"), "네오소울", ["neo-soul", "r&b", "soul"], {"target_valence": 0.52, "target_energy": 0.46}),
@@ -251,6 +259,7 @@ def _catalog_metadata_for_track(name: str, artist_name: str) -> dict[str, object
                 "moods": list(candidate.get("moods") or []),
                 "cross_generation_fit": int(candidate.get("cross_generation_fit") or 0),
                 "release_year": int(candidate.get("release_year") or 0),
+                "instrument_source": candidate.get("instrument_source"),
             }
     return {}
 
@@ -259,6 +268,22 @@ def extract_hard_constraints(context_text: str | None) -> dict[str, bool]:
     """Return only requirements that must be enforced before ranking tracks."""
     lowered = (context_text or "").lower()
     return {"instrumental_required": any(term in lowered for term in INSTRUMENTAL_REQUEST_TERMS)}
+
+
+def extract_instrument_preferences(context_text: str | None) -> dict[str, object]:
+    """Extract only explicitly named instruments; unknown instruments stay unknown."""
+    text = context_text or ""
+    lowered = text.lower()
+    instruments: list[str] = []
+    for aliases, instrument in INSTRUMENT_HINTS:
+        if any(alias in (lowered if alias.isascii() else text) for alias in aliases):
+            instruments.append(instrument)
+    strong = len(instruments) >= 2 or any(marker in text for marker in ("들어간", "중심", "함께"))
+    return {
+        "instruments": list(dict.fromkeys(instruments)),
+        "relation": "all_preferred" if len(instruments) >= 2 else "single_preference",
+        "strength": "strong" if strong and instruments else "soft" if instruments else None,
+    }
 
 
 def _is_sleep_request(context_text: str | None) -> bool:
@@ -321,6 +346,8 @@ def _build_reason_facts(name: str, artist_name: str, seed_genres: list[str] | No
             "origin_kr": "curated_artist_identity_metadata",
             "artist_band": "curated_artist_identity_metadata",
         }
+    if facts.get("instrument_source"):
+        facts.setdefault("feature_provenance", {})["instruments"] = facts["instrument_source"]
     sound_hint = TRACK_SOUND_HINTS.get((name.strip().lower(), artist_name.strip().lower()))
     if sound_hint:
         facts["sound_profile"] = sound_hint[0]
@@ -430,18 +457,18 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "Lose Yourself", "artist_name": "Eminem", "moods": ["anxious", "focused", "angry"], "tags": ["driving", "focused"]},
     {"name": "Bad Habit", "artist_name": "Steve Lacy", "moods": ["lonely", "sad", "focused"], "tags": ["rnb", "groove"]},
     {"name": "Luv (sic) Part 3", "artist_name": "Nujabes", "moods": ["lonely", "sad", "focused"], "tags": ["emotional", "hip-hop"]},
-    {"name": "Take Five", "artist_name": "The Dave Brubeck Quartet", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard"]},
-    {"name": "So What", "artist_name": "Miles Davis", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard"]},
-    {"name": "Blue in Green", "artist_name": "Miles Davis", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard"]},
+    {"name": "Take Five", "artist_name": "The Dave Brubeck Quartet", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "So What", "artist_name": "Miles Davis", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Blue in Green", "artist_name": "Miles Davis", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Autumn Leaves", "artist_name": "Chet Baker", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "vocal-jazz", "standard"]},
-    {"name": "My Favorite Things", "artist_name": "John Coltrane", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard"]},
-    {"name": "Round Midnight", "artist_name": "Thelonious Monk", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard"]},
+    {"name": "My Favorite Things", "artist_name": "John Coltrane", "moods": ["focused", "calm"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Round Midnight", "artist_name": "Thelonious Monk", "moods": ["focused", "calm", "sad"], "tags": ["jazz", "instrumental", "standard", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
     {"name": "Sing, Sing, Sing", "artist_name": "Benny Goodman", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "swing", "big-band", "instrumental"]},
     {"name": "Take the A Train", "artist_name": "Duke Ellington", "moods": ["happy", "focused", "calm"], "tags": ["jazz", "swing", "standard", "big-band"]},
     {"name": "It Don't Mean a Thing", "artist_name": "Duke Ellington", "moods": ["happy", "excited", "focused"], "tags": ["jazz", "swing", "standard", "big-band"]},
     {"name": "Donna Lee", "artist_name": "Charlie Parker", "moods": ["focused", "excited", "angry"], "tags": ["jazz", "bebop", "instrumental"]},
-    {"name": "Moanin'", "artist_name": "Art Blakey & The Jazz Messengers", "moods": ["focused", "calm"], "tags": ["jazz", "hard-bop", "instrumental"]},
-    {"name": "Blue Bossa", "artist_name": "Joe Henderson", "moods": ["calm", "focused", "sad"], "tags": ["jazz", "bossa-nova", "latin", "instrumental"]},
+    {"name": "Moanin'", "artist_name": "Art Blakey & The Jazz Messengers", "moods": ["focused", "calm"], "tags": ["jazz", "hard-bop", "instrumental", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
+    {"name": "Blue Bossa", "artist_name": "Joe Henderson", "moods": ["calm", "focused", "sad"], "tags": ["jazz", "bossa-nova", "latin", "instrumental", "piano", "saxophone"], "instrument_source": "curated_catalog_metadata"},
     {"name": "The Girl from Ipanema", "artist_name": "Stan Getz & João Gilberto", "moods": ["calm", "happy", "focused"], "tags": ["bossa-nova", "latin", "acoustic", "vocal-jazz"]},
     {"name": "Birdland", "artist_name": "Weather Report", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "fusion", "instrumental"]},
     {"name": "Spain", "artist_name": "Chick Corea", "moods": ["excited", "focused", "happy"], "tags": ["jazz", "fusion", "instrumental"]},
@@ -1705,6 +1732,8 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
     family_trip_request = _is_family_trip_request(context_text)
     explicit_genres, _, _ = _extract_genre_family_matches(context_text)
     explicit_genre_set = set(explicit_genres)
+    instrument_preferences = extract_instrument_preferences(context_text)
+    requested_instruments = set(instrument_preferences.get("instruments") or [])
 
     if mood in candidate_moods:
         score += 6
@@ -1716,6 +1745,14 @@ def _score_fallback_candidate(candidate: dict[str, object], mood: str, context_t
         score += 7
     if explicit_genre_set and not (candidate_tags & explicit_genre_set):
         score -= 4
+    if requested_instruments:
+        matched_instruments = requested_instruments & candidate_tags
+        if requested_instruments.issubset(candidate_tags):
+            score += 32
+        elif matched_instruments:
+            score += 12
+        elif instrument_preferences.get("strength") == "strong":
+            score -= 24
     if "한국" in (context_text or "") and "korean" in candidate_tags:
         score += 6
     if any(token in context_lower for token in ("rnb", "r&b", "알앤비")) and "rnb" in candidate_tags:
@@ -1854,6 +1891,39 @@ def _select_fallback_catalog(
             for candidate in catalog
             if "instrumental" in {str(tag).lower() for tag in candidate.get("tags", []) if tag}
         ]
+    explicit_genres, _, _ = _extract_genre_family_matches(context_text)
+    if explicit_genres:
+        exact_genre = [
+            candidate
+            for candidate in catalog
+            if set(explicit_genres).intersection({str(tag).lower() for tag in candidate.get("tags", []) if tag})
+        ]
+        # Explicit genre is a candidate-pool constraint, not a late bonus.
+        if len(exact_genre) >= limit:
+            catalog = exact_genre
+        elif exact_genre:
+            catalog = exact_genre + [candidate for candidate in catalog if candidate not in exact_genre]
+    instrument_preferences = extract_instrument_preferences(context_text)
+    requested_instruments = set(instrument_preferences.get("instruments") or [])
+    if requested_instruments:
+        exact_instruments = [
+            candidate
+            for candidate in catalog
+            if requested_instruments.issubset(
+                {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+            )
+        ]
+        if len(exact_instruments) >= limit:
+            catalog = exact_instruments
+        elif exact_instruments:
+            partial_instruments = [
+                candidate
+                for candidate in catalog
+                if requested_instruments.intersection(
+                    {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+                )
+            ]
+            catalog = exact_instruments + [candidate for candidate in partial_instruments if candidate not in exact_instruments]
     if _is_dawn_sentimental_request(context_text):
         preferred = [
             candidate

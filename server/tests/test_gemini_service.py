@@ -34,12 +34,29 @@ from app.services.spotify_service import (
     build_recommendation_message,
     build_track_reason,
     extract_hard_constraints,
+    extract_instrument_preferences,
     is_verified_instrumental,
     recommend_tracks,
 )
 
 
 class GeminiRecommendationCopyTests(unittest.TestCase):
+    def test_explicit_jazz_and_instrument_request_controls_fallback_catalog(self) -> None:
+        text = (
+            "오늘은 조금 지쳐서 재즈를 듣고 싶어요. 너무 자극적이지 않고, "
+            "피아노와 색소폰이 천천히 흐르면서 긴장을 풀어주는 곡이면 좋겠어요."
+        )
+        catalog = _select_fallback_catalog("tired", text, 6)
+        preferences = extract_instrument_preferences(text)
+
+        self.assertEqual(preferences["instruments"], ["piano", "saxophone"])
+        self.assertEqual(preferences["strength"], "strong")
+        self.assertEqual(len(catalog), 6)
+        self.assertTrue(all("jazz" in item.get("tags", []) for item in catalog))
+        self.assertTrue(
+            all({"piano", "saxophone"}.issubset(set(item.get("tags", []))) for item in catalog)
+        )
+
     def test_korean_band_rock_request_prefers_verified_local_band_catalog(self) -> None:
         text = "오늘 너무 화나는 일이 있었어서 스트레스 풀고 싶어. 우리나라 밴드 락음악 위주로 추천해줘."
         catalog = _select_fallback_catalog("angry", text, 6)

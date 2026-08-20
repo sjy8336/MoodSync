@@ -150,9 +150,10 @@ function LinkBtn({ to, children }) {
 
 
 const MOOD_MAP = {
-    happy: { label: '기쁨', color: '#FF6B5E', soft: '#FFEAE6' },
-    excited: { label: '설렘', color: '#FFB648', soft: '#FFF3DE' },
-    sad: { label: '우울', color: '#7B7FF0', soft: '#ECEDFD' },
+    happy: { label: '기쁨', color: '#9C3D33', soft: '#FFEAE6' },
+    excited: { label: '설렘', color: '#B9791E', soft: '#FFF3DE' },
+    sad: { label: '우울', color: '#3D3D8F', soft: '#ECEDFD' },
+    calm: { label: '평온', color: '#6E6678', soft: '#F1ECE3' },
     lonely: { label: '외로움', color: '#7B7FF0', soft: '#ECEDFD' },
     tired: { label: '피로', color: '#7B7FF0', soft: '#ECEDFD' },
     angry: { label: '분노', color: '#FF6B5E', soft: '#FFEAE6' },
@@ -227,6 +228,10 @@ const formatGeneratedAt = (dateInput) => {
 
 
 const THEME_CLASSES = {
+    '#9C3D33': { bg: 'bg-[#9C3D33]', text: 'text-[#9C3D33]', soft: 'bg-[#FFEAE6]', border: 'border-l-[#9C3D33]' },
+    '#B9791E': { bg: 'bg-[#B9791E]', text: 'text-[#B9791E]', soft: 'bg-[#FFF3DE]', border: 'border-l-[#B9791E]' },
+    '#3D3D8F': { bg: 'bg-[#3D3D8F]', text: 'text-[#3D3D8F]', soft: 'bg-[#ECEDFD]', border: 'border-l-[#3D3D8F]' },
+    '#6E6678': { bg: 'bg-[#6E6678]', text: 'text-[#6E6678]', soft: 'bg-[#F1ECE3]', border: 'border-l-[#6E6678]' },
     '#FF6B5E': { bg: 'bg-[#FF6B5E]', text: 'text-[#FF6B5E]', soft: 'bg-[#FFEAE6]', border: 'border-l-[#FF6B5E]' },
     '#FFB648': { bg: 'bg-[#FFB648]', text: 'text-[#FFB648]', soft: 'bg-[#FFF3DE]', border: 'border-l-[#FFB648]' },
     '#7B7FF0': { bg: 'bg-[#7B7FF0]', text: 'text-[#7B7FF0]', soft: 'bg-[#ECEDFD]', border: 'border-l-[#7B7FF0]' },

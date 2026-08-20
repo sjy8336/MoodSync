@@ -148,6 +148,12 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         token in lowered
         for token in ("가사가 없는", "가사 없는", "가사없이", "가사 없이", "무가사", "연주곡", "보컬 없는", "보컬이 없는", "instrumental")
     )
+    explicit_jazz = any(token in raw_text or token in lowered for token in ("재즈", "jazz"))
+    instrument_preferences = []
+    if any(token in raw_text or token in lowered for token in ("피아노", "piano")):
+        instrument_preferences.append("piano")
+    if any(token in raw_text or token in lowered for token in ("색소폰", "saxophone", "sax")):
+        instrument_preferences.append("saxophone")
 
     context: dict[str, object] = {
         "context": "공부 또는 작업" if is_studying else "",
@@ -156,9 +162,17 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         "avoid": [],
         "priority": [],
         "hard_constraints": {"instrumental_required": instrumental_required},
+        "explicit_genre": "jazz" if explicit_jazz else None,
+        "instrument_preferences": instrument_preferences,
         "mbti_aesthetic": detect_mbti_aesthetic(raw_text),
     }
-    if is_preparing_sleep:
+    if explicit_jazz or instrument_preferences:
+        context["context"] = "차분하게 재즈를 듣는 시간"
+        context["current_state"] = ["오늘 조금 지쳐 있음", "자극적인 음악보다 여유 있는 흐름을 원함"]
+        context["goal"] = ["재즈를 들으며 편안하게 쉬기", "남아 있는 긴장을 천천히 내려놓기"]
+        context["avoid"] = ["공부 또는 업무 맥락", "지나치게 높은 자극"]
+        context["priority"] = ["명시한 재즈 장르", "피아노와 색소폰 메타데이터", "낮은 자극", "차분한 분위기"]
+    elif is_preparing_sleep:
         context["context"] = "수면 준비"
         context["current_state"] = ["수면 부족으로 피곤함", "생각이 많아 쉬기 어려움"]
         context["goal"] = ["지금 편안하게 쉬는 분위기", "생각을 잠시 내려놓기"]
