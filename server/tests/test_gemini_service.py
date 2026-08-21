@@ -212,6 +212,29 @@ class GeminiRecommendationCopyTests(unittest.TestCase):
         self.assertTrue(all(not facts.get("low_stimulation_fit") for facts in high_rhythm_tracks))
         self.assertEqual(facts_by_name["Blue Bossa"].get("rhythmic_intensity"), "moderate")
 
+    def test_calm_jazz_fallback_separates_modal_and_bossa_roles(self) -> None:
+        text = (
+            "오늘은 조금 지쳐서 재즈를 듣고 싶어요. 너무 자극적이지 않고, "
+            "피아노와 색소폰이 천천히 흐르는 곡이면 좋겠어요."
+        )
+        tracks = recommend_tracks("tired", context_text=text)
+        reasons = {
+            track.name: build_track_reason(
+                track,
+                "tired",
+                text,
+                index,
+                _recommendation_role("tired", index, text, reason_facts=track.reason_facts),
+            )
+            for index, track in enumerate(tracks)
+        }
+        message = build_recommendation_message("tired", text, len(tracks), tracks)
+
+        self.assertIn("리듬감이 있는 모달 재즈", reasons["So What"])
+        self.assertIn("보사노바", reasons["Blue Bossa"])
+        self.assertNotEqual(reasons["So What"].split(". ")[1], reasons["Blue Bossa"].split(". ")[1])
+        self.assertNotIn("차분하게 들을 수 있는 재즈", message)
+
     def test_korean_band_rock_request_prefers_verified_local_band_catalog(self) -> None:
         text = "오늘 너무 화나는 일이 있었어서 스트레스 풀고 싶어. 우리나라 밴드 락음악 위주로 추천해줘."
         catalog = _select_fallback_catalog("angry", text, 6)

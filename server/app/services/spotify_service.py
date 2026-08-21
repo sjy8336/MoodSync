@@ -1617,7 +1617,7 @@ def build_recommendation_message(
         moderate_rhythm_count = sum(facts.get("rhythmic_intensity") == "moderate" for facts in track_facts)
         if all_jazz and verified_piano_sax_count >= max(1, len(track_facts) // 2):
             return (
-                "오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 골라봤어요. "
+                "오늘처럼 조금 지친 날 부담 없이 이어 듣기 좋은 재즈 곡들을 골라봤어요. "
                 f"피아노와 색소폰이 어우러지는 연주를 중심으로, {'중간중간 가벼운 리듬감이 느껴지는 곡도' if high_rhythm_count or moderate_rhythm_count else '느긋한 연주를'} 함께 담았어요."
             )
         rhythm_clause = (
@@ -1625,7 +1625,7 @@ def build_recommendation_message(
             if high_rhythm_count or moderate_rhythm_count
             else "느긋한 연주를 중심으로 골라봤어요."
         )
-        return f"오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 중심으로 골라봤어요. {rhythm_clause}"
+        return f"오늘처럼 조금 지친 날 부담 없이 이어 듣기 좋은 재즈 곡들을 골라봤어요. {rhythm_clause}"
 
     if study_flow_request and avoids_overstimulation and not long_focus_request:
         return "지금의 좋은 집중 흐름은 유지하면서도 너무 과하지 않게 활기를 더할 수 있는 곡들을 골라봤어요."
@@ -1823,10 +1823,17 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
     ][index % 2]
 
 
-def _calm_jazz_role_without_instrumentation(index: int) -> str:
+def _calm_jazz_role_without_instrumentation(track_facts: dict[str, object], index: int) -> str:
+    tags = {str(tag).lower() for tag in track_facts.get("tags", []) if tag}
+    if "bossa-nova" in tags:
+        return "잔잔한 연주 사이에서 가벼운 리듬감을 느끼고 싶을 때 듣기 좋아요."
+    if "modal" in tags and ("groove" in tags or "rhythmic_light" in tags):
+        return "느긋한 재즈 사이에 조금 더 리듬감 있는 변화를 주고 싶을 때 잘 어울려요."
+    if "modal" in tags:
+        return "느긋한 재즈 연주를 이어 듣고 싶은 순간에 잘 맞아요."
     sentences = (
         "오늘처럼 조금 지친 상태에서 자극적인 음악보다 차분하게 듣고 싶을 때 잘 맞아요.",
-        "연주를 천천히 따라가며 여유 있는 시간을 보내고 싶을 때 잘 어울려요.",
+        "느긋하게 재즈 연주를 이어 듣고 싶을 때 잘 어울려요.",
         "강한 자극보다 느긋한 재즈를 찾는 순간에 듣기 좋아요.",
         "긴장이 남아 있어 서두르지 않는 음악을 듣고 싶을 때 잘 맞아요.",
         "감성적인 재즈를 차분하게 듣고 싶은 순간에 어울려요.",
@@ -1983,6 +1990,8 @@ def _jazz_catalog_feature_sentence(tags: set[str], index: int = 0) -> str | None
         return "독특한 박자감이 또렷한 재즈 연주곡이에요."
     if "hard-bop" in tags:
         return "하드 밥 계열의 리듬감이 분명한 재즈 곡이에요."
+    if "modal" in tags and ("groove" in tags or "rhythmic_light" in tags):
+        return "리듬감이 있는 모달 재즈 연주곡이에요."
     if "modal" in tags:
         return "모달 재즈 특성이 드러나는 연주곡이에요."
     if "standard" in tags:
@@ -2165,7 +2174,7 @@ def build_track_reason(
         )
         if jazz_feature:
             role_sentence = (
-                _calm_jazz_role_without_instrumentation(index)
+                _calm_jazz_role_without_instrumentation(facts, index)
                 if facts.get("instrumentation_verification") != "recording_metadata"
                 else _role_listening_sentence(recommendation_role, index)
             )

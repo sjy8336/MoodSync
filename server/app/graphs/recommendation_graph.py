@@ -338,6 +338,26 @@ def _uses_generic_focus_feature(reason: str, track: TrackSummary, input_text: st
     return False
 
 
+def _uses_generic_jazz_feature(reason: str, track: TrackSummary, input_text: str) -> bool:
+    """Keep verified jazz details from being replaced by a generic style label."""
+    if not _is_calm_jazz_instrument_request(input_text):
+        return False
+
+    facts = track.reason_facts or {}
+    tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
+    instruments = {str(item).lower() for item in facts.get("recording_instruments", []) if item}
+    first = _first_sentence_signature(reason)
+    if facts.get("instrumentation_verification") == "recording_metadata" and {"piano", "saxophone"}.issubset(instruments):
+        return "피아노" not in first or "색소폰" not in first
+    if "bossa-nova" in tags:
+        return "보사노바" not in first or "리듬" not in first
+    if "modal" in tags and ("groove" in tags or "rhythmic_light" in tags):
+        return "모달" not in first or "리듬" not in first
+    if "modal" in tags:
+        return "모달" not in first
+    return False
+
+
 def _allows_repeated_focus_feature(first_sentence: str, track: TrackSummary, input_text: str) -> bool:
     """A shared, verified piano fact is safer than fabricated wording variation."""
     if not _is_long_focus_request(input_text):
@@ -372,6 +392,36 @@ def _focus_reason_quality(reason: str, track: TrackSummary, input_text: str) -> 
         "used_feature_count": len(used),
         "factual_richness_score": 0 if generic else min(1.0, len(used) / max(1, len(available))),
         "generic_reason_validation": not generic,
+        "hallucination_validation": not _mentions_unsupported_music_detail(reason, track),
+    }
+
+
+def _jazz_reason_quality(reason: str, track: TrackSummary, input_text: str) -> dict[str, object]:
+    """Expose whether a jazz reason used the strongest verified or catalog style fact."""
+    if not _is_calm_jazz_instrument_request(input_text):
+        return {}
+
+    facts = track.reason_facts or {}
+    tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
+    instruments = {str(item).lower() for item in facts.get("recording_instruments", []) if item}
+    recording_verified = facts.get("instrumentation_verification") == "recording_metadata"
+    first = _first_sentence_signature(reason).lower()
+    feature_checks = (
+        ("verified_piano_sax", recording_verified and {"piano", "saxophone"}.issubset(instruments), ("피아노", "색소폰")),
+        ("bossa_nova_light_rhythm", "bossa-nova" in tags, ("보사노바", "리듬")),
+        ("modal_light_rhythm", "modal" in tags and bool({"groove", "rhythmic_light"} & tags), ("모달", "리듬")),
+        ("modal_jazz", "modal" in tags, ("모달",)),
+        ("jazz_standard", {"jazz", "standard"}.issubset(tags), ("재즈", "스탠더드")),
+    )
+    available = [name for name, exists, _ in feature_checks if exists]
+    used = [name for name, exists, terms in feature_checks if exists and all(term in first for term in terms)]
+    return {
+        "distinctive_feature_available": bool(available),
+        "factual_feature_count": len(available),
+        "features_used_in_reason": used,
+        "used_feature_count": len(used),
+        "factual_richness_score": 0 if _uses_generic_jazz_feature(reason, track, input_text) else min(1.0, len(used) / max(1, len(available))),
+        "generic_reason_validation": not _uses_generic_jazz_feature(reason, track, input_text),
         "hallucination_validation": not _mentions_unsupported_music_detail(reason, track),
     }
 
@@ -745,6 +795,7 @@ def _apply_recommendation_copy(
                 or _leaks_long_focus_context(reason, input_text)
                 or _repeats_long_focus_feature_in_role(reason, input_text)
                 or _uses_generic_focus_feature(reason, track, input_text)
+                or _uses_generic_jazz_feature(reason, track, input_text)
                 or _uses_repetitive_or_abstract_language(reason)
                 or _repeats_time_clause(reason)
                 or not _has_two_sentence_reason_structure(reason)
@@ -810,7 +861,7 @@ def _apply_recommendation_copy(
             fallback_first_sentences.add(_first_sentence_signature(reason))
             used_second_sentences.add(_second_sentence_signature(reason))
         reason_facts = dict(track.reason_facts or {})
-        quality = _focus_reason_quality(reason, track, input_text)
+        quality = _focus_reason_quality(reason, track, input_text) or _jazz_reason_quality(reason, track, input_text)
         if quality:
             reason_facts["reason_quality"] = quality
         enriched_tracks.append(track.model_copy(update={"reason": reason, "reason_facts": reason_facts}))
