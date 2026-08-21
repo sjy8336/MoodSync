@@ -192,9 +192,62 @@ def _canonical_track_token(value: str) -> str:
     return " ".join(cleaned.split())
 
 
+def _exact_jazz_recording_reference(track: TrackSummary) -> dict[str, object] | None:
+    """Return players only for a Spotify-resolved title, artist, and album match."""
+    if not track.spotify_track_name or not track.album_name:
+        return None
+    name = _canonical_track_token(track.spotify_track_name)
+    artist = _canonical_track_token(track.artist_name)
+    album = _canonical_track_token(track.album_name)
+    for reference in JAZZ_RECORDING_REFERENCES:
+        if name != str(reference["name"]):
+            continue
+        if artist not in {str(value) for value in reference["artists"]}:
+            continue
+        if album in {str(value) for value in reference["albums"]}:
+            return reference
+    return None
+
+
 TRACK_METADATA_ALIASES: dict[tuple[str, str], tuple[str, str]] = {
     ("sleepless in seoul", "ph-1"): ("sleepless in ______", "ph-1"),
 }
+
+# Spotify track responses identify a recording but do not include its players.
+# These references are applied only after title, artist, and album all match.
+# A title match by itself (notably for "Round Midnight") must remain unverified.
+JAZZ_RECORDING_REFERENCES: tuple[dict[str, object], ...] = (
+    {
+        "name": "in a sentimental mood",
+        "artists": ("john coltrane", "duke ellington"),
+        "albums": ("duke ellington & john coltrane",),
+        "instruments": ("piano", "saxophone", "tenor saxophone"),
+    },
+    {
+        "name": "so what",
+        "artists": ("miles davis",),
+        "albums": ("kind of blue",),
+        "instruments": ("piano", "saxophone", "tenor saxophone", "trumpet"),
+    },
+    {
+        "name": "blue in green",
+        "artists": ("miles davis",),
+        "albums": ("kind of blue",),
+        "instruments": ("piano", "saxophone", "tenor saxophone", "trumpet"),
+    },
+    {
+        "name": "naima",
+        "artists": ("john coltrane",),
+        "albums": ("giant steps",),
+        "instruments": ("piano", "saxophone", "tenor saxophone"),
+    },
+    {
+        "name": "blue bossa",
+        "artists": ("joe henderson",),
+        "albums": ("page one",),
+        "instruments": ("piano", "saxophone", "tenor saxophone", "trumpet"),
+    },
+)
 
 # Spotify may return romanized artist names for Korean catalog entries.
 _SPOTIFY_ARTIST_ALIASES: dict[tuple[str, str], tuple[str, ...]] = {
@@ -536,6 +589,12 @@ def _attach_spotify_recording_facts(facts: dict[str, object], track: TrackSummar
     enriched.setdefault("feature_provenance", {})["instruments"] = "not_available_from_spotify_track_response"
     if track.spotify_track_name and track.album_name:
         enriched["canonical_recording_identity"] = f"{track.spotify_track_name} — {track.artist_name} — {track.album_name}"
+    reference = _exact_jazz_recording_reference(track)
+    if reference:
+        enriched["instrumentation_verification"] = "recording_metadata"
+        enriched["recording_instruments"] = list(reference["instruments"])
+        enriched["recording_reference_source"] = "curated_exact_recording_reference"
+        enriched.setdefault("feature_provenance", {})["instruments"] = "curated_exact_recording_reference"
     return enriched
 
 
@@ -953,6 +1012,7 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             "spotify_track_name": track.spotify_track_name,
             "spotify_track_id": track.track_id if not track.track_id.startswith("fallback-") else None,
             "canonical_recording_identity": track.canonical_recording_identity or facts.get("canonical_recording_identity"),
+            "canonical_track_name": track.spotify_track_name or track.name,
             "recording_match_confidence": track.recording_match_confidence,
             "recording_identity_verified": bool(
                 not track.track_id.startswith("fallback-")
@@ -961,6 +1021,7 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
                 and track.recording_match_confidence >= 0.7
             ),
             "actual_instruments": facts.get("recording_instruments") or [],
+            "verified_instruments": facts.get("recording_instruments") or [],
             "piano": "piano" in set(facts.get("recording_instruments") or []),
             "saxophone": "saxophone" in set(facts.get("recording_instruments") or []),
             "instrumentation_source": track.instrumentation_source or facts.get("instrumentation_verification") or "unknown",

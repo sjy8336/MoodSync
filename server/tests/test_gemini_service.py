@@ -197,6 +197,8 @@ class GeminiRecommendationCopyTests(unittest.TestCase):
         debug = build_selection_debug("재즈와 피아노, 색소폰 연주를 듣고 싶어요.", [track])
 
         self.assertTrue(debug["selected_tracks"][0]["recording_identity_verified"])
+        self.assertEqual(debug["selected_tracks"][0]["canonical_track_name"], "Round Midnight")
+        self.assertEqual(debug["selected_tracks"][0]["verified_instruments"], [])
 
     def test_jazz_rhythm_intensity_is_separate_from_low_stimulation(self) -> None:
         text = (
