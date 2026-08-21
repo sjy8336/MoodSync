@@ -650,6 +650,33 @@ def _long_focus_reason_ingredient(facts: object, role: dict[str, str]) -> dict[s
     }
 
 
+def _calm_jazz_reason_ingredient(facts: object, role: dict[str, str]) -> dict[str, str] | None:
+    """Prefer verified recording instrumentation, then distinctive jazz style."""
+    if not isinstance(facts, dict):
+        return None
+    tags = {str(tag).strip().lower() for tag in facts.get("tags", []) if str(tag).strip()}
+    instruments = {str(item).strip().lower() for item in facts.get("recording_instruments", []) if str(item).strip()}
+    recording_verified = facts.get("instrumentation_verification") == "recording_metadata"
+    if recording_verified and "jazz" in tags and {"piano", "saxophone"}.issubset(instruments):
+        feature, source = "피아노와 색소폰이 함께하는 재즈 연주", "verified_piano_sax_jazz"
+    elif "bossa-nova" in tags:
+        feature, source = "보사노바 계열의 가벼운 리듬이 있는 재즈 연주", "bossa_nova_light_rhythm"
+    elif "modal" in tags:
+        feature, source = "모달 재즈 특성이 드러나는 연주", "modal_jazz"
+    elif {"jazz", "standard"}.issubset(tags):
+        feature, source = "재즈 스탠더드의 연주", "jazz_standard"
+    elif {"jazz", "instrumental"}.issubset(tags):
+        feature, source = "기악 연주가 중심인 재즈", "jazz_instrumental"
+    else:
+        return None
+    return {
+        "primary_feature": feature,
+        "feature_source": source,
+        "feature_provenance": "recording_metadata" if recording_verified else "track_metadata",
+        "recommendation_role": role.get("focus", ""),
+    }
+
+
 def _build_music_feature_summary(facts: object) -> str | None:
     """Turn known tags into one Korean phrase instead of exposing a tag list."""
     if not isinstance(facts, dict):
@@ -861,6 +888,7 @@ def generate_recommendation_copy(
     is_family_trip = request_context["context"] == "가족 여행의 차 안"
     is_dawn_sentimental = request_context["context"] == "새벽 감성 플레이리스트"
     is_long_focus = request_context["context"] == "장시간 이어 듣는 집중 세션"
+    is_calm_jazz = request_context.get("explicit_genre") == "jazz" and bool(request_context.get("instrument_preferences"))
     track_lines = []
     for index, track in enumerate(tracks):
         role = _recommendation_role(
@@ -877,6 +905,8 @@ def generate_recommendation_copy(
             if is_dawn_sentimental
             else _long_focus_reason_ingredient(track.get("reason_facts"), role)
             if is_long_focus
+            else _calm_jazz_reason_ingredient(track.get("reason_facts"), role)
+            if is_calm_jazz
             else None
         )
         default_music_feature = _build_music_feature_summary(track.get("reason_facts"))
@@ -896,6 +926,7 @@ def generate_recommendation_copy(
                 "family_trip_reason_anchor": ingredient["feature_source"] if ingredient else None,
                 "dawn_sentimental_reason_anchor": ingredient["feature_source"] if is_dawn_sentimental and ingredient else None,
                 "long_focus_reason_anchor": ingredient["feature_source"] if is_long_focus and ingredient else None,
+                "calm_jazz_reason_anchor": ingredient["feature_source"] if is_calm_jazz and ingredient else None,
                 "reason_ingredient": ingredient,
             }
         )
@@ -997,6 +1028,7 @@ def generate_recommendation_copy(
         "The summary must describe the selected songs, not instruct the user. Never end it with '들어보세요', '즐겨보세요', '채워보세요', '만끽해 보세요', or '느껴보세요'.\n"
         "Keep internal planning separate from user-facing copy. Never mention metadata availability, recording validation, confidence, ranking, candidate filtering, fallback use, penalties, coverage, or the fact that an instrument was not inferred. The summary should say only what kind of songs were selected and how they fit the user's listening situation.\n"
         "For calm jazz requests, describe the playlist naturally with supplied musical facts such as a calm jazz focus or a lighter rhythmic variation. Never explain that some instruments were unverified or that stronger-rhythm tracks were intentionally limited.\n"
+        "For a calm jazz request with piano and saxophone preferences, use piano or saxophone only when the supplied reason_ingredient says recording-level instrumentation was verified. Otherwise describe only the supplied jazz style, standard, modal feature, or bossa rhythm. In the summary, mention piano-and-sax coverage only when the supplied tracks verify it; never write therapist-like claims such as '마음을 달래줄', '긴장을 풀어줄', '기대어', or a CTA such as '쉬어보세요'.\n"
         "Do not say the music soothes the user's body or mind, such as '몸과 마음을 달래며'. Describe only the current rest context and the songs selected for it.\n"
         "In the summary, do not use overlapping anxiety words such as '초조' and '조급' together; choose one clear expression.\n"
         "Use only verified_reason_facts as factual grounding for musical claims.\n"

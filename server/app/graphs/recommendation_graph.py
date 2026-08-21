@@ -689,6 +689,11 @@ def _is_safe_recommendation_message(
         ):
             return False
 
+    if _is_calm_jazz_instrument_request(input_text) and any(
+        marker in message for marker in ("달래줄", "긴장을 풀어줄", "기대어", "쉬어보세요", "내려놓아 보세요")
+    ):
+        return False
+
     # Explicitly selected moods must remain visible in dawn/sentimental summaries;
     # MBTI-derived aesthetic terms must not replace them.
     is_dawn_sentimental = any(token in input_text.lower() for token in ("새벽", "센치"))
