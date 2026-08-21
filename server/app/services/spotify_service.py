@@ -1701,9 +1701,9 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
         "펑크 사운드로 구간 바꾸기": "장거리 이동 중 사운드를 한 번 바꾸고 싶은 구간에 듣기 좋아요.",
         "몽환적인 시작 열기": "현실과 조금 떨어진 듯한 분위기에서 음악을 시작하고 싶을 때 잘 맞아요.",
         "신스 중심 분위기 이어가기": "신스가 어우러진 사운드에 자연스럽게 몰입하고 싶은 순간에 듣기 좋아요.",
-        "공간감 있는 사운드에 머물기": "소리가 넓게 퍼지는 듯한 분위기에 귀를 두고 싶을 때 잘 어울려요.",
+        "공간감 있는 사운드에 머물기": "현실과 조금 거리를 둔 듯한 분위기를 원할 때 잘 어울려요.",
         "잔잔함에서 한 걸음 벗어나기": "조용하기만 한 곡보다 조금 더 밀도 있는 사운드를 찾을 때 잘 맞아요.",
-        "감성적인 흐름 이어가기": "몽환적이면서 감성적인 흐름을 이어 듣는 시간에 잘 맞아요.",
+        "감성적인 흐름 이어가기": "현실과 조금 떨어진 듯한 음악을 이어 듣고 싶을 때 잘 어울려요.",
         "몰입감 있는 구간 만들기": "주변과 잠시 거리를 두고 사운드에 집중하고 싶은 순간에 잘 맞아요.",
         "새벽 분위기에 천천히 잠기기": "새벽 특유의 고요한 분위기에 천천히 잠기고 싶을 때 잘 맞아요.",
         "혼자 생각에 머물기": "혼자 생각이 길어지는 순간에 듣기 좋아요.",
@@ -2022,7 +2022,7 @@ def _dream_pop_synth_feature_sentence(track_tags: list[str], index: int = 0) -> 
     if {"electronic", "spacious"}.issubset(tags):
         feature_sentences.append("공간감 있는 전자 사운드가 중심인 곡이에요.")
     if "atmospheric" in tags:
-        feature_sentences.append("대기감 있는 사운드가 자연스럽게 이어지는 곡이에요.")
+        feature_sentences.append("공간감 있는 분위기가 드러나는 곡이에요.")
     return feature_sentences[index % len(feature_sentences)] if feature_sentences else None
 
 

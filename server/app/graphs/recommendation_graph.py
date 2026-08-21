@@ -228,6 +228,16 @@ def _uses_unnatural_recommendation_language(reason: str) -> bool:
         "깊이감을 더해",
         "여운을 더해",
         "겹겹이 쌓이",
+        "아스라이",
+        "스며드는",
+        "곁에 머무",
+        "깊이 번지",
+        "감성을 품은",
+        "귀를 두",
+        "흐름에 머물",
+        "감성적인 흐름",
+        "분위기의 결",
+        "사운드의 결",
     )
     return any(marker in reason for marker in markers)
 
@@ -470,6 +480,18 @@ def _uses_unsupported_dream_sound_feature(reason: str, track: TrackSummary, inpu
     return False
 
 
+def _repeats_dream_feature_in_role(reason: str, input_text: str) -> bool:
+    """Keep track facts and the listening role from restating the same trait."""
+    if not _is_dream_pop_synth_request(input_text):
+        return False
+    first_sentence = _first_sentence_signature(reason)
+    second_sentence = _second_sentence_signature(reason)
+    return any(
+        marker in first_sentence and marker in second_sentence
+        for marker in ("몽환", "감성", "공간감", "차분", "신스팝", "앰비언트", "슈게이즈")
+    )
+
+
 def _is_feature_role_compatible(track: TrackSummary, mood: str, input_text: str, index: int) -> bool:
     """Reject a reason whose role contradicts verified track facts."""
     role = _recommendation_role(mood, index, input_text, reason_facts=track.reason_facts)
@@ -609,6 +631,7 @@ def _apply_recommendation_copy(
                 or _leaks_dawn_sentimental_context(reason, input_text)
                 or _uses_unselected_family_energy_feature(reason, track, index, input_text, mood)
                 or _uses_unsupported_dream_sound_feature(reason, track, input_text)
+                or _repeats_dream_feature_in_role(reason, input_text)
                 or _mentions_unsupported_music_detail(reason, track)
                 or not _is_feature_role_compatible(track, mood, input_text, index)
                 or not _has_verified_grounding(item, track)
