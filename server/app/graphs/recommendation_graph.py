@@ -671,6 +671,8 @@ def _is_safe_recommendation_message(
         focus_effect_markers = ("몰입을 유지", "집중을 유지", "집중력을 높", "산만함을 막", "집중할 수 있도록")
         if any(marker in message for marker in focus_effect_markers):
             return False
+        if "지나치지 않은 리듬감" in message:
+            return False
         if not has_explicit_study_or_work and any(
             marker in message for marker in ("공부", "작업", "업무", "과제", "코딩", "해야 할 일")
         ):
