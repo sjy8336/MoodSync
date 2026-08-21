@@ -334,6 +334,36 @@ def _uses_generic_focus_feature(reason: str, track: TrackSummary, input_text: st
     return False
 
 
+def _focus_reason_quality(reason: str, track: TrackSummary, input_text: str) -> dict[str, object]:
+    """Expose whether a focus reason used the strongest supplied fact, not a mood fallback."""
+    if not _is_long_focus_request(input_text):
+        return {}
+
+    facts = track.reason_facts or {}
+    tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
+    first = _first_sentence_signature(reason).lower()
+    feature_checks = (
+        ("bossa_nova_light_rhythm", "bossa-nova" in tags, ("보사노바", "리듬")),
+        ("verified_piano_sax_jazz", bool({"piano", "saxophone"}.issubset(set(facts.get("recording_instruments") or []))), ("피아노", "색소폰")),
+        ("jazz_standard", bool({"jazz", "standard"}.issubset(tags)), ("스탠더드", "재즈")),
+        ("jazz_instrumental", bool({"jazz", "instrumental"}.issubset(tags)), ("재즈",)),
+        ("piano_instrumental", bool({"piano", "instrumental"}.issubset(tags)), ("피아노",)),
+        ("ambient_instrumental", bool({"ambient", "instrumental"}.issubset(tags)), ("앰비언트",)),
+    )
+    available = [name for name, exists, _ in feature_checks if exists]
+    used = [name for name, exists, terms in feature_checks if exists and all(term in first for term in terms)]
+    generic = _uses_generic_focus_feature(reason, track, input_text)
+    return {
+        "distinctive_feature_available": bool(available),
+        "factual_feature_count": len(available),
+        "features_used_in_reason": used,
+        "used_feature_count": len(used),
+        "factual_richness_score": 0 if generic else min(1.0, len(used) / max(1, len(available))),
+        "generic_reason_validation": not generic,
+        "hallucination_validation": not _mentions_unsupported_music_detail(reason, track),
+    }
+
+
 def _uses_repetitive_or_abstract_language(reason: str) -> bool:
     abstract_markers = (
         "분위기의 결",
@@ -411,7 +441,14 @@ def _uses_repetitive_or_abstract_language(reason: str) -> bool:
 def _mentions_unsupported_music_detail(reason: str, track: TrackSummary) -> bool:
     facts_text = str(track.reason_facts or {}).lower()
     detail_markers = ("신스 베이스", "드럼", "보컬", "후렴", "전개", "리듬", "악기", "bpm")
-    return any(marker in reason.lower() and marker not in facts_text for marker in detail_markers)
+    tags = {str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}
+    for marker in detail_markers:
+        if marker not in reason.lower() or marker in facts_text:
+            continue
+        if marker == "리듬" and tags & {"bossa-nova", "groove", "rhythmic", "rhythmic_light"}:
+            continue
+        return True
+    return False
 
 
 def _repeats_time_clause(reason: str) -> bool:
@@ -733,7 +770,11 @@ def _apply_recommendation_copy(
                         break
             fallback_first_sentences.add(_first_sentence_signature(reason))
             used_second_sentences.add(_second_sentence_signature(reason))
-        enriched_tracks.append(track.model_copy(update={"reason": reason}))
+        reason_facts = dict(track.reason_facts or {})
+        quality = _focus_reason_quality(reason, track, input_text)
+        if quality:
+            reason_facts["reason_quality"] = quality
+        enriched_tracks.append(track.model_copy(update={"reason": reason, "reason_facts": reason_facts}))
     return enriched_tracks, reason_map
 
 
@@ -1023,6 +1064,15 @@ def _compose_copy_and_track_reasons(state: RecommendationWorkflowState) -> dict[
             "gemini_copy_error": gemini_copy_error,
             "gemini_copy_pending": bool(state.get("defer_gemini_copy")),
             "reason_source": "gemini" if reason_map else "fallback",
+            "focus_reason_quality": [
+                {
+                    "track_id": track.track_id,
+                    "display_title": track.display_title or track.name,
+                    **dict((track.reason_facts or {}).get("reason_quality") or {}),
+                }
+                for track in enriched_tracks
+                if (track.reason_facts or {}).get("reason_quality")
+            ],
             "selection_profile": state.get("selection_profile") or {},
         },
     }
@@ -1134,6 +1184,15 @@ def complete_recommendation_copy(recommendation_id: int) -> None:
                 "rendered_card_count": len(enriched_tracks),
                 "gemini_copy_error": copy_error,
                 "reason_source": "gemini" if reason_map else "fallback",
+                "focus_reason_quality": [
+                    {
+                        "track_id": track.track_id,
+                        "display_title": track.display_title or track.name,
+                        **dict((track.reason_facts or {}).get("reason_quality") or {}),
+                    }
+                    for track in enriched_tracks
+                    if (track.reason_facts or {}).get("reason_quality")
+                ],
             }
         )
         recommendation.generation_profile = profile
