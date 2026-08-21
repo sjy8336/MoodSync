@@ -595,6 +595,54 @@ def _dawn_sentimental_reason_ingredient(facts: object, role: dict[str, str]) -> 
     }
 
 
+def _long_focus_reason_ingredient(facts: object, role: dict[str, str]) -> dict[str, str] | None:
+    """Choose one concrete focus-track fact before falling back to mood wording."""
+    if not isinstance(facts, dict):
+        return None
+
+    tags = {str(tag).strip().lower() for tag in facts.get("tags", []) if str(tag).strip()}
+    verified_instruments = {
+        str(item).strip().lower()
+        for item in facts.get("recording_instruments", [])
+        if str(item).strip()
+    }
+    instrumentation_verified = facts.get("instrumentation_verification") == "recording_metadata"
+
+    if "bossa-nova" in tags:
+        feature = "보사노바 계열의 가벼운 리듬이 이어지는 재즈 연주"
+        source = "bossa_nova_light_rhythm"
+    elif instrumentation_verified and "jazz" in tags and {"piano", "saxophone"}.issubset(verified_instruments):
+        feature = "피아노와 색소폰이 함께하는 재즈 연주"
+        source = "verified_piano_sax_jazz"
+    elif {"jazz", "standard"}.issubset(tags):
+        feature = "스탠더드 재즈 연주"
+        source = "jazz_standard"
+    elif {"jazz", "instrumental"}.issubset(tags):
+        feature = "재즈 연주"
+        source = "jazz_instrumental"
+    elif {"piano", "instrumental"}.issubset(tags):
+        feature = "피아노 중심의 연주"
+        source = "piano_instrumental"
+    elif {"ambient", "instrumental"}.issubset(tags):
+        feature = "앰비언트 연주"
+        source = "ambient_instrumental"
+    elif "ambient" in tags:
+        feature = "앰비언트 분위기"
+        source = "ambient"
+    elif "rhythmic_light" in tags or "groove" in tags:
+        feature = "가벼운 리듬감"
+        source = "light_rhythm"
+    else:
+        return None
+
+    return {
+        "primary_feature": feature,
+        "feature_source": source,
+        "feature_provenance": "recording_metadata" if instrumentation_verified else "track_metadata",
+        "recommendation_role": role.get("focus", ""),
+    }
+
+
 def _build_music_feature_summary(facts: object) -> str | None:
     """Turn known tags into one Korean phrase instead of exposing a tag list."""
     if not isinstance(facts, dict):
@@ -805,6 +853,7 @@ def generate_recommendation_copy(
     request_context = _build_listening_request_context(context_text, selected_vibes)
     is_family_trip = request_context["context"] == "가족 여행의 차 안"
     is_dawn_sentimental = request_context["context"] == "새벽 감성 플레이리스트"
+    is_long_focus = request_context["context"] == "장시간 이어 듣는 집중 세션"
     track_lines = []
     for index, track in enumerate(tracks):
         role = _recommendation_role(
@@ -819,6 +868,8 @@ def generate_recommendation_copy(
             if is_family_trip
             else _dawn_sentimental_reason_ingredient(track.get("reason_facts"), role)
             if is_dawn_sentimental
+            else _long_focus_reason_ingredient(track.get("reason_facts"), role)
+            if is_long_focus
             else None
         )
         default_music_feature = _build_music_feature_summary(track.get("reason_facts"))
@@ -837,6 +888,7 @@ def generate_recommendation_copy(
                 "recommendation_role": role,
                 "family_trip_reason_anchor": ingredient["feature_source"] if ingredient else None,
                 "dawn_sentimental_reason_anchor": ingredient["feature_source"] if is_dawn_sentimental and ingredient else None,
+                "long_focus_reason_anchor": ingredient["feature_source"] if is_long_focus and ingredient else None,
                 "reason_ingredient": ingredient,
             }
         )
@@ -864,6 +916,7 @@ def generate_recommendation_copy(
         "Do not say that music 'helps immersion' or 'helps concentration'. Never claim that music prevents distraction, maintains concentration, or improves study efficiency.\n"
         "For a long laptop/focus session, the summary must aggregate only supplied playlist facts: low-stimulation or calm anchors, piano or ambient tracks when supplied, and a light-rhythm track only when at least one supplied track has light_rhythm_fit. Never describe the entire playlist as having a steady rhythm unless every supplied fact supports that claim. Do not write '집중할 수 있도록', '몰입을 유지', '집중력을 높여', '흐름을 유지시켜', or '산만함을 막아'.\n"
         "For a long laptop/focus reason, sentence 1 must use a verified genre, instrumentation, or rhythm fact before a generic mood. Sentence 2 must describe a direct listening moment such as keeping music on during a long laptop session, wanting a calm instrumental, wanting background music that is not too monotonous, or wanting a little rhythm. Do not write '한 가지 흐름에 머물며', '음악이 앞에 나서지 않는 분위기로', '일정한 간격으로', or '차분하게 가라앉는'. If sentence 1 says '차분한', sentence 2 must not repeat '차분한'.\n"
+        "For a long laptop/focus playlist, reason_ingredient is code-selected factual planning data. Sentence 1 must use its primary_feature instead of replacing it with '차분한', '잔잔한', '몽환적인', or '감성적인'. For example, preserve a supplied bossa-nova light-rhythm feature, a jazz-standard feature, a piano-instrumental feature, or an ambient-instrumental feature. Use piano plus saxophone only when the supplied ingredient says that exact instrumentation was verified.\n"
         "For an ambiguous title such as '1/1', use only the supplied exact identity and verified_reason_facts. Do not infer an artist, album, piano, synthesizer, loop, or recording detail from the title. When exact instrumentation is not verified, use a short genre or supplied-tag description instead.\n"
         "When user_text contains a concrete life context such as job searching, an interview, a breakup, or exhaustion, name that context naturally in message.\n"
         "Keep the user's timeline accurate. Words such as '어제', '어젯밤', and '지난밤' describe a past cause, not the current time. If the user says they want to rest now, describe the current context as '지금 잠시 쉬려는 상황', never as if it is currently night unless the user explicitly says so.\n"

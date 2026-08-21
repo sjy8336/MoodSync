@@ -308,6 +308,24 @@ def _repeats_long_focus_feature_in_role(reason: str, input_text: str) -> bool:
     return "차분" in first and "차분" in second
 
 
+def _uses_generic_focus_feature(reason: str, track: TrackSummary, input_text: str) -> bool:
+    """Reject generic mood copy when a stronger supplied focus fact is available."""
+    if not _is_long_focus_request(input_text):
+        return False
+    first = _first_sentence_signature(reason)
+    tags = {str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}
+    generic_opening = first.startswith(("차분한 분위기", "몽환적인 분위기", "부드러운 분위기"))
+    if "bossa-nova" in tags:
+        return "보사노바" not in first and "리듬" not in first
+    if {"jazz", "standard"}.issubset(tags):
+        return generic_opening or "재즈" not in first
+    if {"piano", "instrumental"}.issubset(tags):
+        return generic_opening or "피아노" not in first
+    if {"ambient", "instrumental"}.issubset(tags):
+        return generic_opening or "앰비언트" not in first
+    return False
+
+
 def _uses_repetitive_or_abstract_language(reason: str) -> bool:
     abstract_markers = (
         "분위기의 결",
@@ -642,6 +660,7 @@ def _apply_recommendation_copy(
                 or _has_incomplete_reason_sentence(reason)
                 or _leaks_long_focus_context(reason, input_text)
                 or _repeats_long_focus_feature_in_role(reason, input_text)
+                or _uses_generic_focus_feature(reason, track, input_text)
                 or _uses_repetitive_or_abstract_language(reason)
                 or _repeats_time_clause(reason)
                 or not _has_two_sentence_reason_structure(reason)
