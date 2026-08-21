@@ -304,6 +304,18 @@ def _is_long_focus_request(context_text: str | None) -> bool:
     return has_long_session and has_focus_goal
 
 
+def _is_dream_pop_synth_request(context_text: str | None) -> bool:
+    """Recognize explicit sound requests without treating immersion as study."""
+    text = context_text or ""
+    lowered = text.lower()
+    wants_dream_pop = any(token in lowered or token in text for token in ("dream pop", "dream-pop", "드림 팝", "드림팝"))
+    wants_synth_or_space = any(
+        token in lowered or token in text
+        for token in ("synth", "신스", "공간감", "공간 감", "atmospheric", "atmosphere", "spatial", "immersive", "몰입감")
+    )
+    return wants_dream_pop and wants_synth_or_space
+
+
 def _is_calm_jazz_instrument_request(context_text: str | None) -> bool:
     explicit_genres, genre_labels, _ = _extract_genre_family_matches(context_text)
     preferences = extract_instrument_preferences(context_text)
@@ -461,6 +473,27 @@ def _build_contextual_reason_facts(name: str, artist_name: str, context_text: st
                 ("punk", facts["punk_fit"]),
                 ("singalong_proxy", facts["singalong_fit"]),
             ) if present
+        ]
+    if _is_dream_pop_synth_request(context_text):
+        tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
+        facts["dream_pop_fit"] = "dream-pop" in tags
+        facts["synth_fit"] = bool(tags & {"synth", "synth-pop"})
+        facts["atmospheric_fit"] = "atmospheric" in tags
+        facts["spatial_fit"] = "spacious" in tags
+        facts["immersive_fit"] = "immersive" in tags
+        facts["dreamy_fit"] = "dreamy" in tags
+        facts["intensity"] = "moderate" if tags & {"immersive", "synth", "electronic", "synth-pop"} else "low"
+        facts["dream_pop_ranking_factors"] = [
+            key
+            for key, present in (
+                ("dream_pop", facts["dream_pop_fit"]),
+                ("synth", facts["synth_fit"]),
+                ("atmospheric", facts["atmospheric_fit"]),
+                ("spatial", facts["spatial_fit"]),
+                ("immersive", facts["immersive_fit"]),
+                ("dreamy", facts["dreamy_fit"]),
+            )
+            if present
         ]
     if _is_long_focus_request(context_text):
         tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
@@ -668,9 +701,14 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "Gymnopédie No. 1", "artist_name": "Erik Satie", "moods": ["calm", "sad"], "tags": ["classical", "piano", "instrumental"], "reason": "클래식 특유의 느슨한 호흡이 마음을 안정시키는 데 좋아요."},
     {"name": "Three Little Birds", "artist_name": "Bob Marley & The Wailers", "moods": ["happy", "calm"], "tags": ["reggae", "uplifting", "groove"], "reason": "레게의 느긋한 리듬이 기분을 부드럽게 들어 올려줘요."},
     {"name": "The Thrill Is Gone", "artist_name": "B.B. King", "moods": ["sad", "lonely"], "tags": ["blues", "soul", "emotional"], "reason": "블루스의 깊은 결이 감정 정리에 잘 맞아요."},
-    {"name": "An Ending (Ascent)", "artist_name": "Brian Eno", "moods": ["calm", "lonely"], "tags": ["ambient", "instrumental", "dreamy"], "reason": "앰비언트 특유의 넓은 공간감이 생각을 천천히 가라앉혀줘요."},
+    {"name": "An Ending (Ascent)", "artist_name": "Brian Eno", "moods": ["calm", "lonely"], "tags": ["ambient", "electronic", "synth", "instrumental", "dreamy", "atmospheric", "spacious", "immersive"], "reason": "앰비언트 특유의 넓은 공간감이 생각을 천천히 가라앉혀줘요."},
     {"name": "One More Time", "artist_name": "Daft Punk", "moods": ["happy", "excited"], "tags": ["house", "dance", "electronic"], "reason": "하우스/댄스 결을 직관적으로 느끼기 좋은 곡이에요."},
     {"name": "When The Sun Hits", "artist_name": "Slowdive", "moods": ["sad", "dreamy", "calm"], "tags": ["shoegaze", "dream-pop", "dreamy"], "reason": "슈게이즈 특유의 물결 같은 질감이 몽환적인 분위기를 잘 만들어줘요."},
+    {"name": "Space Song", "artist_name": "Beach House", "moods": ["calm", "dreamy", "sad"], "tags": ["dream-pop", "dreamy", "atmospheric", "spacious", "immersive"]},
+    {"name": "Myth", "artist_name": "Beach House", "moods": ["calm", "dreamy", "emotional"], "tags": ["dream-pop", "dreamy", "atmospheric", "immersive"]},
+    {"name": "Heaven or Las Vegas", "artist_name": "Cocteau Twins", "moods": ["dreamy", "excited", "calm"], "tags": ["dream-pop", "shoegaze", "dreamy", "atmospheric", "spacious"]},
+    {"name": "Midnight City", "artist_name": "M83", "moods": ["dreamy", "excited", "calm"], "tags": ["synth-pop", "electronic", "synth", "atmospheric", "spacious", "immersive"]},
+    {"name": "Oblivion", "artist_name": "Grimes", "moods": ["dreamy", "excited", "emotional"], "tags": ["synth-pop", "electronic", "synth", "dreamy", "immersive"]},
     {"name": "Rhubarb", "artist_name": "Aphex Twin", "moods": ["calm", "lonely"], "tags": ["ambient", "electronic", "instrumental"], "reason": "차분한 전자음의 결이 앰비언트 요청에 잘 맞아요."},
     {"name": "Comptine d'un autre été: L'après-midi", "artist_name": "Yann Tiersen", "moods": ["calm", "lonely"], "tags": ["classical", "piano", "instrumental", "soft", "emotional"]},
     {"name": "Nuvole Bianche", "artist_name": "Ludovico Einaudi", "moods": ["calm", "sad"], "tags": ["classical", "piano", "instrumental", "soft", "emotional"]},
@@ -892,6 +930,7 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
     if compound_pop_punk:
         requested_genre_axes.append("pop-punk")
     current_genre = explicit_genres[0] if explicit_genres else None
+    dream_pop_synth_request = _is_dream_pop_synth_request(context_text)
     selected_tracks = []
     for track in tracks:
         facts = track.reason_facts or {}
@@ -929,6 +968,13 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             "punk_fit": facts.get("punk_fit"),
             "pop_punk_bridge": facts.get("pop_punk_bridge"),
             "singalong_fit": facts.get("singalong_fit"),
+            "dream_pop_fit": facts.get("dream_pop_fit"),
+            "synth_fit": facts.get("synth_fit"),
+            "atmospheric_fit": facts.get("atmospheric_fit"),
+            "spatial_fit": facts.get("spatial_fit"),
+            "immersive_fit": facts.get("immersive_fit"),
+            "dreamy_fit": facts.get("dreamy_fit"),
+            "intensity": facts.get("intensity"),
             "playlist_role": (
                 "light_rhythm"
                 if facts.get("light_rhythm_fit")
@@ -951,10 +997,14 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         "previous_candidate_pool_reused": False,
         "focus_request_feature_reset": True,
         "current_retrieval_query": (
-            explicit_genres[:5] if explicit_genres else ["genre_neutral_focus_catalog"]
+            ["dream-pop", "synth", "atmospheric", "spacious", "immersive"]
+            if dream_pop_synth_request
+            else explicit_genres[:5] if explicit_genres else ["genre_neutral_catalog"]
         ),
         "genre_ranking_weights": (
             {"explicit_genre": 1.0}
+            if dream_pop_synth_request
+            else {"explicit_genre": 1.0}
             if explicit_genres
             else {"low_stimulation": 1.0, "sustained_focus": 1.0, "calm": 0.9, "light_rhythm": 0.7}
         ),
@@ -966,6 +1016,20 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         "pop_side_count": sum(bool((track.reason_facts or {}).get("pop_fit")) and not bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
         "punk_side_count": sum(bool((track.reason_facts or {}).get("punk_fit")) and not bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
         "pop_punk_bridge_count": sum(bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
+        "dream_pop_count": sum(bool((track.reason_facts or {}).get("dream_pop_fit")) for track in tracks),
+        "dream_pop_adjacent_count": sum(
+            bool((track.reason_facts or {}).get("atmospheric_fit")) and not bool((track.reason_facts or {}).get("dream_pop_fit"))
+            for track in tracks
+        ),
+        "synth_confirmed_count": sum(bool((track.reason_facts or {}).get("synth_fit")) for track in tracks),
+        "atmospheric_count": sum(bool((track.reason_facts or {}).get("atmospheric_fit")) for track in tracks),
+        "spatial_fit_count": sum(bool((track.reason_facts or {}).get("spatial_fit")) for track in tracks),
+        "immersive_fit_count": sum(bool((track.reason_facts or {}).get("immersive_fit")) for track in tracks),
+        "acoustic_or_piano_only_count": sum(
+            bool({"acoustic", "piano", "classical"}.intersection({str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}))
+            and not bool({"dream-pop", "synth", "synth-pop", "electronic", "atmospheric", "spacious", "immersive"}.intersection({str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}))
+            for track in tracks
+        ),
         "selected_tracks": selected_tracks,
     }
 
@@ -980,6 +1044,10 @@ def _merge_context_audio_hints(context_text: str | None) -> tuple[list[str], dic
     explicit_genres, _, explicit_params = _extract_genre_family_matches(context_text)
     genres.extend(explicit_genres)
     params.update(explicit_params)
+
+    if _is_dream_pop_synth_request(context_text):
+        genres.extend(["dream-pop", "shoegaze", "synth-pop", "electronic"])
+        params.update({"target_energy": 0.52, "target_acousticness": 0.38})
 
     lowered = context_text.lower()
     for keyword, data in CONTEXT_AUDIO_HINTS:
@@ -1434,6 +1502,7 @@ def build_recommendation_message(
     avoids_overstimulation = any(token in (context_text or "").lower() for token in ("소란", "시끄", "방해", "과하지", "너무 강", "자극"))
     sleep_request = _is_sleep_request(context_text)
     dawn_sentimental_request = _is_dawn_sentimental_request(context_text)
+    dream_pop_synth_request = _is_dream_pop_synth_request(context_text)
     mbti_aesthetic = detect_mbti_aesthetic(context_text)
     constraints = extract_hard_constraints(context_text)
     verified_instrumental_only = bool(tracks) and all(is_verified_instrumental(track) for track in tracks)
@@ -1445,6 +1514,12 @@ def build_recommendation_message(
     tags = context.get("tags") or []
     track_signature = "|".join(track.track_id for track in (tracks or [])[:3])
     base_seed = f"{normalized_mood}|{context_text or ''}|{track_count}|{track_signature}"
+
+    if _is_dream_pop_synth_request(context_text):
+        return (
+            "몽환적인 신스와 공간감 있는 사운드를 중심으로, 현실과 조금 떨어진 듯한 분위기에서 듣기 좋은 곡들을 골라봤어요. "
+            "잔잔함에만 치우치지 않도록 드림 팝과 전자 사운드가 있는 곡들도 함께 담았어요."
+        )
 
     if _is_calm_jazz_instrument_request(context_text):
         track_facts = [track.reason_facts or {} for track in (tracks or [])]
@@ -1495,7 +1570,7 @@ def build_recommendation_message(
     if _is_drive_request(context_text) and not _is_family_trip_request(context_text):
         return (
             "주말 장거리 드라이브에 어울리는 신나는 팝과 펑크 곡들을 골라봤어요. "
-            "차 안에서 따라 부르기 좋은 밝은 곡과 강한 밴드 사운드를 함께 담았어요."
+            "밝은 팝부터 강한 밴드 사운드까지, 이동하면서 활기 있게 듣기 좋은 곡들을 함께 담았어요."
         )
 
     if _is_family_trip_request(context_text):
@@ -1507,7 +1582,20 @@ def build_recommendation_message(
             f"{season_text} 여행의 설렘을 이어가며 차 안에서 다 같이 즐기기 좋은 음악들이에요."
         )
 
-    if _is_dawn_sentimental_request(context_text):
+    if _is_dream_pop_synth_request(context_text):
+        preferred = [
+            candidate
+            for candidate in catalog
+            if {"dream-pop", "synth", "synth-pop", "atmospheric", "spacious", "immersive"}.intersection(
+                {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+            )
+        ]
+        # Keep the candidate pool specific to the requested sound first. A
+        # broader ambient bridge may remain only when it carries verified
+        # synth/space metadata, never as a substitute for dream pop.
+        if preferred:
+            catalog = preferred + [candidate for candidate in catalog if candidate not in preferred]
+    elif _is_dawn_sentimental_request(context_text):
         return (
             "새벽의 센치한 분위기에 천천히 잠겨 듣기 좋은 몽환적이고 감성적인 곡들을 골라봤어요. "
             "혼자 생각이 길어지는 순간에 조용히 이어 듣기 좋은 음악들이에요."
@@ -1592,11 +1680,19 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
         "여름 드라이브 분위기 살리기": "여름 여행의 들뜬 분위기를 조금 더 살리고 싶은 순간에 듣기 좋아요.",
         "여행의 설렘 이어가기": "목적지로 향하는 시간을 즐겁게 이어가고 싶을 때 듣기 좋아요.",
         "드라이브 시작 분위기 열기": "주말 드라이브를 시작하며 신나는 곡을 듣고 싶을 때 잘 맞아요.",
-        "차 안에서 따라 부르기": "차 안에서 함께 따라 부르기 좋은 곡을 찾을 때 듣기 좋아요.",
+        "차 안에서 따라 부르기": "차 안에서 함께 따라 부르며 듣고 싶은 순간에 잘 맞아요.",
         "팝 분위기 더하기": "도로 위에서 밝은 팝 분위기를 이어가고 싶을 때 잘 맞아요.",
         "펑크 에너지 더하기": "강한 밴드 사운드로 드라이브 분위기를 바꾸고 싶을 때 어울려요.",
         "이동 중 리듬 변화": "이동하면서 에너지 있는 곡을 이어 듣고 싶을 때 듣기 좋아요.",
         "장거리 드라이브 기분 유지": "멀리 이동하는 동안 활기 있는 음악을 듣고 싶을 때 잘 맞아요.",
+        "조금 더 강한 사운드 듣기": "이동 중 조금 더 강한 밴드 사운드를 원할 때 잘 맞아요.",
+        "펑크 사운드로 구간 바꾸기": "장거리 이동 중 사운드를 한 번 바꾸고 싶은 구간에 듣기 좋아요.",
+        "몽환적인 시작 열기": "현실과 조금 떨어진 듯한 분위기에서 음악을 시작하고 싶을 때 잘 맞아요.",
+        "신스 중심 분위기 이어가기": "신스가 어우러진 사운드에 자연스럽게 몰입하고 싶은 순간에 듣기 좋아요.",
+        "공간감 있는 사운드에 머물기": "소리가 넓게 퍼지는 듯한 분위기에 귀를 두고 싶을 때 잘 어울려요.",
+        "잔잔함에서 한 걸음 벗어나기": "조용하기만 한 곡보다 조금 더 밀도 있는 사운드를 찾을 때 잘 맞아요.",
+        "감성적인 흐름 이어가기": "몽환적이면서 감성적인 흐름을 이어 듣고 싶을 때 듣기 좋아요.",
+        "몰입감 있는 구간 만들기": "주변과 잠시 거리를 두고 사운드에 집중하고 싶은 순간에 잘 맞아요.",
         "새벽 분위기에 천천히 잠기기": "새벽 특유의 고요한 분위기에 천천히 잠기고 싶을 때 잘 맞아요.",
         "혼자 생각에 머물기": "혼자 생각이 길어지는 순간에 듣기 좋아요.",
         "센치한 감정을 따라가기": "센치해진 감정을 억지로 바꾸지 않고 따라가고 싶을 때 잘 어울려요.",
@@ -1877,14 +1973,44 @@ def _drive_feature_sentence(track_tags: list[str], index: int = 0) -> str | None
     if "punk" in tags:
         feature_sentences.append("강한 밴드 사운드가 중심인 펑크 록 곡이에요.")
         feature_sentences.append("펑크 록 특유의 직선적인 사운드가 분명한 곡이에요.")
+        feature_sentences.append("펑크 성향의 록 사운드가 중심인 곡이에요.")
     if "pop" in tags or "dance-pop" in tags or "synth-pop" in tags:
         feature_sentences.append("밝고 신나는 팝 분위기가 또렷한 곡이에요.")
     if "rock" in tags:
-        feature_sentences.append("록 사운드가 중심인 곡이에요.")
+        feature_sentences.append(
+            "밴드 중심의 록 사운드가 있는 곡이에요."
+            if "artist_band" in tags
+            else "록 사운드가 중심인 곡이에요."
+        )
     if "high_energy" in tags or "driving" in tags:
         feature_sentences.append("에너지 있는 분위기가 분명한 곡이에요.")
     if "upbeat" in tags:
         feature_sentences.append("밝고 경쾌한 분위기가 이어지는 곡이에요.")
+    return feature_sentences[index % len(feature_sentences)] if feature_sentences else None
+
+
+def _dream_pop_synth_feature_sentence(track_tags: list[str], index: int = 0) -> str | None:
+    """Describe only catalog-confirmed genre and sound traits for this request."""
+    tags = {str(tag).lower() for tag in track_tags if tag}
+    feature_sentences: list[str] = []
+    if {"dream-pop", "synth"}.issubset(tags):
+        feature_sentences.append("드림 팝과 신스가 함께 어우러지는 곡이에요.")
+    if {"dream-pop", "atmospheric"}.issubset(tags):
+        feature_sentences.append("드림 팝 특유의 몽환적인 사운드가 중심인 곡이에요.")
+    if {"dream-pop", "shoegaze"}.issubset(tags):
+        feature_sentences.append("드림 팝과 슈게이즈 성향이 함께 드러나는 곡이에요.")
+    if {"dream-pop", "spacious"}.issubset(tags):
+        feature_sentences.append("공간감 있는 드림 팝 사운드가 중심인 곡이에요.")
+    if {"dream-pop", "immersive"}.issubset(tags):
+        feature_sentences.append("몰입감 있는 드림 팝 사운드가 또렷한 곡이에요.")
+    if {"synth-pop", "synth"}.issubset(tags):
+        feature_sentences.append("신스팝 기반의 전자 사운드가 또렷한 곡이에요.")
+    if {"ambient", "synth", "spacious"}.issubset(tags):
+        feature_sentences.append("신스 중심의 앰비언트 사운드가 넓게 이어지는 연주곡이에요.")
+    if {"electronic", "spacious"}.issubset(tags):
+        feature_sentences.append("공간감 있는 전자 사운드가 중심인 곡이에요.")
+    if "atmospheric" in tags:
+        feature_sentences.append("대기감 있는 사운드가 자연스럽게 이어지는 곡이에요.")
     return feature_sentences[index % len(feature_sentences)] if feature_sentences else None
 
 
@@ -1940,8 +2066,16 @@ def build_track_reason(
         focus_feature = _focus_feature_sentence(track_tags, track_moods)
         if focus_feature:
             return f"{focus_feature} {_role_listening_sentence(recommendation_role, index)}"
+    if _is_dream_pop_synth_request(context_text):
+        dream_feature = _dream_pop_synth_feature_sentence(
+            track_tags, index if reason_feature_index is None else reason_feature_index
+        )
+        if dream_feature:
+            return f"{dream_feature} {_role_listening_sentence(recommendation_role, index)}"
     if _is_drive_request(context_text) and not _is_family_trip_request(context_text):
-        drive_feature = _drive_feature_sentence(track_tags, index)
+        drive_feature = _drive_feature_sentence(
+            track_tags, index if reason_feature_index is None else reason_feature_index
+        )
         if drive_feature:
             return f"{drive_feature} {_role_listening_sentence(recommendation_role, index)}"
     if _is_calm_jazz_instrument_request(context_text):
@@ -2272,6 +2406,7 @@ def _score_fallback_candidate(
     calm_jazz_instrument_request = _is_calm_jazz_instrument_request(context_text)
     unhurried_flow_request = _requests_unhurried_flow(context_text)
     dawn_sentimental_request = _is_dawn_sentimental_request(context_text)
+    dream_pop_synth_request = _is_dream_pop_synth_request(context_text)
     mbti_aesthetic = detect_mbti_aesthetic(context_text)
     family_trip_request = _is_family_trip_request(context_text)
     drive_request = _is_drive_request(context_text)
@@ -2394,6 +2529,26 @@ def _score_fallback_candidate(
                 score += 20
             if candidate_tags & {"hard-bop", "fusion", "swing", "big-band", "rhythmic_strong", "high_energy"}:
                 score -= 18
+    if dream_pop_synth_request:
+        # The user named genre and sound conditions explicitly. Apply them
+        # before broad calm/dreamy affinity so piano ballads and soft R&B do
+        # not substitute for dream-pop or synth-led candidates.
+        if "dream-pop" in candidate_tags:
+            score += 42
+        if candidate_tags & {"synth", "synth-pop"}:
+            score += 34
+        if "atmospheric" in candidate_tags:
+            score += 20
+        if "spacious" in candidate_tags:
+            score += 18
+        if "immersive" in candidate_tags:
+            score += 16
+        if "dreamy" in candidate_tags:
+            score += 10
+        if candidate_tags & {"classical", "piano", "rnb", "soul", "soft", "warm"} and not candidate_tags & {
+            "dream-pop", "synth", "synth-pop", "electronic", "atmospheric", "spacious", "immersive"
+        }:
+            score -= 48
     if dawn_sentimental_request:
         # This request seeks mood congruence, not emotional regulation. Favor
         # verified dreamy and sentimental cues while keeping the playlist low-key.
@@ -2731,6 +2886,7 @@ def _fallback_tracks(
         not access_token
         or cover_can_expand_candidates
         or _is_long_focus_request(context_text)
+        or _is_dream_pop_synth_request(context_text)
     ) else limit
     catalog = _select_fallback_catalog(mood, context_text, catalog_limit, selection_guidance, recent_track_keys)
     if not access_token:

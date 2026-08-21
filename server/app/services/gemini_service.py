@@ -152,21 +152,41 @@ _DRIVE_ROLES = [
     ("펑크 에너지 더하기", "강한 밴드 사운드로 드라이브 분위기를 바꾸고 싶을 때"),
     ("이동 중 리듬 변화", "이동하면서 에너지 있는 곡을 이어 듣고 싶을 때"),
     ("장거리 드라이브 기분 유지", "멀리 이동하는 동안 활기 있는 음악을 듣고 싶을 때"),
+    ("조금 더 강한 사운드 듣기", "이동 중 조금 더 강한 밴드 사운드를 원할 때"),
+    ("펑크 사운드로 구간 바꾸기", "장거리 이동 중 사운드를 한 번 바꾸고 싶은 구간에"),
 ]
 _DRIVE_POP_ROLES = [
     _DRIVE_ROLES[0],
     _DRIVE_ROLES[2],
     _DRIVE_ROLES[5],
+    _DRIVE_ROLES[1],
+    _DRIVE_ROLES[4],
+    _DRIVE_ROLES[3],
 ]
 _DRIVE_PUNK_ROLES = [
     _DRIVE_ROLES[3],
     _DRIVE_ROLES[4],
     _DRIVE_ROLES[5],
+    _DRIVE_ROLES[1],
+    _DRIVE_ROLES[0],
+    _DRIVE_ROLES[6],
 ]
 _DRIVE_BRIDGE_ROLES = [
     _DRIVE_ROLES[1],
     _DRIVE_ROLES[3],
     _DRIVE_ROLES[4],
+    _DRIVE_ROLES[0],
+    _DRIVE_ROLES[2],
+    _DRIVE_ROLES[5],
+]
+
+_DREAM_POP_SYNTH_ROLES = [
+    ("몽환적인 시작 열기", "현실과 조금 떨어진 듯한 분위기에서 음악을 시작하고 싶을 때"),
+    ("신스 중심 분위기 이어가기", "신스가 어우러진 사운드에 자연스럽게 몰입하고 싶은 순간에"),
+    ("공간감 있는 사운드에 머물기", "소리가 넓게 퍼지는 듯한 분위기에 귀를 두고 싶을 때"),
+    ("잔잔함에서 한 걸음 벗어나기", "조용하기만 한 곡보다 조금 더 밀도 있는 사운드를 찾을 때"),
+    ("감성적인 흐름 이어가기", "몽환적이면서 감성적인 흐름을 이어 듣고 싶을 때"),
+    ("몰입감 있는 구간 만들기", "주변과 잠시 거리를 두고 사운드에 집중하고 싶은 순간에"),
 ]
 
 
@@ -174,7 +194,8 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
     """Extract explicit goals and limits without adding another model call."""
     raw_text = text or ""
     lowered = raw_text.lower()
-    is_studying = any(token in raw_text or token in lowered for token in ("공부", "과제", "작업", "집중", "몰입"))
+    # "몰입감 있는 음악" is a sound preference, not evidence of study/work.
+    is_studying = any(token in raw_text or token in lowered for token in ("공부", "과제", "작업", "업무", "노트북 앞"))
     is_long_focus = any(token in raw_text or token in lowered for token in ("오래 앉", "오랫동안", "장시간", "노트북 앞")) and any(token in raw_text or token in lowered for token in ("몰입", "집중", "산만하지"))
     avoids_overstimulation = any(
         token in raw_text or token in lowered
@@ -197,6 +218,9 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
     )
     is_dawn_sentimental = any(token in raw_text or token in lowered for token in ("새벽", "늦은 밤", "밤공기", "센치")) and any(
         token in raw_text or token in lowered for token in ("감성", "몽환", "센치", "플레이리스트")
+    )
+    dream_pop_synth = any(token in lowered or token in raw_text for token in ("dream pop", "dream-pop", "드림 팝", "드림팝")) and any(
+        token in lowered or token in raw_text for token in ("synth", "신스", "공간감", "공간 감", "atmospheric", "spatial", "immersive", "몰입감")
     )
     instrumental_required = any(
         token in lowered
@@ -229,7 +253,14 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
         "instrument_preferences": instrument_preferences,
         "mbti_aesthetic": detect_mbti_aesthetic(raw_text),
     }
-    if explicit_jazz or instrument_preferences:
+    if dream_pop_synth:
+        context["context"] = "드림 팝과 신스 중심의 몰입 청취"
+        context["current_state"] = ["현실에서 잠시 벗어난 듯한 분위기를 원함"]
+        context["goal"] = ["드림 팝과 신스 사운드 듣기", "공간감과 몰입감 있는 흐름 찾기"]
+        context["avoid"] = ["공부 또는 업무 맥락", "잔잔하기만 한 피아노 또는 발라드 중심 구성"]
+        context["priority"] = ["드림 팝", "신스", "공간감과 대기감", "몰입감", "몽환적·감성적 분위기"]
+        context["explicit_genres"] = ["dream-pop"]
+    elif explicit_jazz or instrument_preferences:
         context["context"] = "차분하게 재즈를 듣는 시간"
         context["current_state"] = ["오늘 조금 지쳐 있음", "자극적인 음악보다 여유 있는 흐름을 원함"]
         context["goal"] = ["재즈를 들으며 편안하게 쉬기", "남아 있는 긴장을 천천히 내려놓기"]
@@ -629,11 +660,14 @@ def _recommendation_role(
     is_sleep_context = request_context["context"] == "수면 준비"
     is_family_trip_context = request_context["context"] == "가족 여행의 차 안"
     is_drive_context = request_context["context"] == "주말 장거리 드라이브"
+    is_dream_pop_synth_context = request_context["context"] == "드림 팝과 신스 중심의 몰입 청취"
     is_korean_rock_context = request_context["context"] == "국내 밴드 록 감정 전환"
     is_dawn_sentimental_context = request_context["context"] == "새벽 감성 플레이리스트"
     is_long_focus_context = request_context["context"] == "장시간 이어 듣는 집중 세션"
     is_calm_jazz_context = request_context.get("explicit_genre") == "jazz" and bool(request_context.get("instrument_preferences"))
-    if is_sleep_context:
+    if is_dream_pop_synth_context:
+        roles = _DREAM_POP_SYNTH_ROLES
+    elif is_sleep_context:
         raw_tags = reason_facts.get("tags", []) if isinstance(reason_facts, dict) else []
         tags = {str(tag).strip().lower() for tag in raw_tags if str(tag).strip()}
         # Keep all sleep roles distinct while using verified tags to choose the
@@ -870,6 +904,7 @@ def generate_recommendation_copy(
         "For drive requests, use only the current road-trip context: driving, car listening, singalong intent, upbeat energy, and the supplied genres. Never use study, work, focus, immersion, task, pace-maintenance, or stale Korean-band-origin roles unless the current text explicitly contains them.\n"
         "Treat '팝과 펑크', '팝, 펑크', and '팝이랑 펑크' as two explicit genre axes, pop and punk. Treat '팝펑크' or 'pop-punk' as the single pop-punk genre. Do not collapse the former into pop-punk.\n"
         "For drive reasons, keep sentence 2 tied to the car/road-trip moment. Use roles such as opening a weekend drive, singalong listening, bright pop on the road, strong punk-band sound, or changing the rhythm during a long drive. Do not mention studying or maintaining a work flow.\n"
+        "For drive summaries and reasons, do not claim that music raises the user's tension or mood, fills the drive, or adds excitement. Avoid '텐션을 높여주다', '기분을 끌어올려주다', '흥겨움을 더해주다', '에너지를 더해주다', and '매력을 담은 곡'. Describe the selected sound and the listening moment instead.\n"
         "For a dawn-sentimental request, interpret words such as '새벽', '센치', and 'INFP 감성' as a late-night, introspective aesthetic. Do not infer a personality trait or claim that a personality type prefers a genre. This request seeks emotional congruence, not recovery: never use study, work, tasks, focus, productivity, rest, healing, tension relief, or mood-improvement roles. Keep the late-night context even if the current clock is not dawn. Prefer dreamy, emotional, soft, calm, ambient, or R&B/Soul facts only when supplied.\n"
         "For every dawn-sentimental reason, keep two sentences: first only verified track traits, then a distinct role such as lingering in the dawn mood, following a sentimental feeling, or staying with a lingering thought. Do not use '잠시 쉬어가며 듣기 좋아요' in this context. Translate emotional metadata naturally as '감성적인', '여운이 있는', or '차분한' only when verified; never write the unnatural phrase '감정적인 분위기이'.\n"
         "For a dawn-sentimental playlist, reason_ingredient is code-selected verified planning data. Sentence 1 must use its primary_feature as a natural track description. When its secondary_feature is present, combine it only when the two form one natural phrase; never make an attribute list. Sentence 2 must use recommendation_role only as the user's late-night listening moment, never as study, work, recovery, or rest advice.\n"

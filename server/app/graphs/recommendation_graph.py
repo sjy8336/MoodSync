@@ -37,6 +37,8 @@ from app.services.spotify_service import (
     _enforce_korean_band_rock_selection,
     _is_korean_band_rock_track,
     _is_calm_jazz_instrument_request,
+    _is_dream_pop_synth_request,
+    _is_drive_request,
     _korean_band_rock_preference_strength,
     build_selection_debug,
     _split_context,
@@ -254,6 +256,11 @@ def _leaks_long_focus_context(reason: str, input_text: str) -> bool:
     is_long_focus = any(token in input_text or token in lowered for token in ("오래 앉", "오랫동안", "장시간", "노트북 앞")) and any(
         token in input_text or token in lowered for token in ("몰입", "집중", "산만하지")
     )
+    if _is_dream_pop_synth_request(input_text):
+        return any(
+            marker in reason
+            for marker in ("공부", "작업", "해야 할 일", "집중이 느슨", "공부 흐름", "작업 흐름", "업무", "페이스 유지")
+        )
     if not is_long_focus:
         return False
     return any(marker in reason for marker in ("잠시 쉬어가며", "해야 할 일", "공부 흐름", "집중이 흔들", "페이스를 잡"))
@@ -316,6 +323,11 @@ def _uses_repetitive_or_abstract_language(reason: str) -> bool:
         "자극 없이",
         "기분을 가볍게 더",
         "기분을 더하고 싶",
+        "흥겨움을 더해",
+        "에너지를 더해",
+        "에너지 넘치는",
+        "펼쳐지는 곡",
+        "매력을 담은",
     )
     repeated_descriptor_patterns = (
         r"부드.{0,24}부드",
@@ -341,6 +353,11 @@ def _repeats_time_clause(reason: str) -> bool:
 def _first_sentence_signature(reason: str) -> str:
     first_sentence = re.split(r"[.!?]", reason, maxsplit=1)[0]
     return re.sub(r"\s+", " ", first_sentence).strip()
+
+
+def _second_sentence_signature(reason: str) -> str:
+    sentences = [sentence.strip() for sentence in re.findall(r"[^.!?]+[.!?]", reason) if sentence.strip()]
+    return re.sub(r"\s+", " ", sentences[1]).strip() if len(sentences) > 1 else ""
 
 
 def _has_two_sentence_reason_structure(reason: str) -> bool:
@@ -446,6 +463,11 @@ def _is_safe_recommendation_message(
 ) -> bool:
     if not isinstance(message, str) or not message.strip():
         return False
+    if _is_dream_pop_synth_request(input_text) and any(
+        marker in message
+        for marker in ("공부", "작업", "해야 할 일", "집중이 느슨", "공부 흐름", "작업 흐름", "업무", "페이스 유지")
+    ):
+        return False
     disallowed_markers = (
         "곁을 지켜",
         "곁에 있어",
@@ -485,6 +507,12 @@ def _is_safe_recommendation_message(
     is_family_trip = "가족" in input_text and ("여행" in input_text or "차" in input_text)
     if is_family_trip and any(marker in message for marker in ("더해줄", "채웠습니다", "만끽해", "즐겨보세요")):
         return False
+    is_drive_request = any(marker in input_text for marker in ("차 타고", "차 안", "드라이브", "도로 위"))
+    if is_drive_request and any(
+        marker in message
+        for marker in ("텐션을 높여", "텐션을 올려", "기분을 끌어올려", "채워줄", "떠나보세요")
+    ):
+        return False
 
     # Explicitly selected moods must remain visible in dawn/sentimental summaries;
     # MBTI-derived aesthetic terms must not replace them.
@@ -510,16 +538,19 @@ def _apply_recommendation_copy(
     copy_reasons = recommendation_copy.get("track_reasons") if recommendation_copy else []
     reason_map: dict[str, str] = {}
     used_first_sentences: set[str] = set()
+    used_second_sentences: set[str] = set()
     for index, track in enumerate(tracks):
         for item in copy_reasons:
             if not isinstance(item, dict) or str(item.get("track_id")) != track.track_id:
                 continue
             reason = str(item.get("reason") or "").strip()
             first_sentence = _first_sentence_signature(reason)
+            second_sentence = _second_sentence_signature(reason)
             if (
                 not reason
                 or not first_sentence
                 or first_sentence in used_first_sentences
+                or second_sentence in used_second_sentences
                 or _is_generic_track_reason(reason)
                 or _exposes_internal_recommendation_metadata(reason)
                 or _overstates_listening_effect(reason)
@@ -543,6 +574,7 @@ def _apply_recommendation_copy(
                 continue
             reason_map[track.track_id] = reason
             used_first_sentences.add(first_sentence)
+            used_second_sentences.add(second_sentence)
             break
     enriched_tracks: list[TrackSummary] = []
     fallback_first_sentences: set[str] = set(reason_map.values())
@@ -557,22 +589,39 @@ def _apply_recommendation_copy(
             # For catalog-backed jazz fallback, prefer another supplied feature
             # when the first sentence was already used in this playlist. This
             # changes wording only; it never invents recording metadata.
-            if _is_calm_jazz_instrument_request(input_text):
+            if (
+                _is_calm_jazz_instrument_request(input_text)
+                or _is_drive_request(input_text)
+                or _is_dream_pop_synth_request(input_text)
+            ):
                 for feature_index in range(index + 1, index + 8):
-                    if _first_sentence_signature(reason) not in fallback_first_sentences:
+                    if (
+                        _first_sentence_signature(reason) not in fallback_first_sentences
+                        and _second_sentence_signature(reason) not in used_second_sentences
+                    ):
                         break
+                    alternative_role = _recommendation_role(
+                        mood,
+                        feature_index,
+                        input_text,
+                        reason_facts=track.reason_facts,
+                    )
                     alternative = build_track_reason(
                         track,
                         mood,
                         input_text,
                         index,
-                        role,
+                        alternative_role,
                         reason_feature_index=feature_index,
                     )
-                    if _first_sentence_signature(alternative) not in fallback_first_sentences:
+                    if (
+                        _first_sentence_signature(alternative) not in fallback_first_sentences
+                        and _second_sentence_signature(alternative) not in used_second_sentences
+                    ):
                         reason = alternative
                         break
             fallback_first_sentences.add(_first_sentence_signature(reason))
+            used_second_sentences.add(_second_sentence_signature(reason))
         enriched_tracks.append(track.model_copy(update={"reason": reason}))
     return enriched_tracks, reason_map
 
