@@ -338,6 +338,14 @@ def _uses_generic_focus_feature(reason: str, track: TrackSummary, input_text: st
     return False
 
 
+def _allows_repeated_focus_feature(first_sentence: str, track: TrackSummary, input_text: str) -> bool:
+    """A shared, verified piano fact is safer than fabricated wording variation."""
+    if not _is_long_focus_request(input_text):
+        return False
+    tags = {str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}
+    return {"piano", "instrumental"}.issubset(tags) and first_sentence == "피아노 중심의 연주곡이에요"
+
+
 def _focus_reason_quality(reason: str, track: TrackSummary, input_text: str) -> dict[str, object]:
     """Expose whether a focus reason used the strongest supplied fact, not a mood fallback."""
     if not _is_long_focus_request(input_text):
@@ -432,6 +440,9 @@ def _uses_repetitive_or_abstract_language(reason: str) -> bool:
         "매력을 담은",
         "연주로 이루어진 곡",
         "연주로 구성된 곡",
+        "연주가 이어지는 곡",
+        "연주가 흐르는 곡",
+        "분위기가 흐르는 곡",
     )
     repeated_descriptor_patterns = (
         r"부드.{0,24}부드",
@@ -713,7 +724,10 @@ def _apply_recommendation_copy(
             if (
                 not reason
                 or not first_sentence
-                or first_sentence in used_first_sentences
+                or (
+                    first_sentence in used_first_sentences
+                    and not _allows_repeated_focus_feature(first_sentence, track, input_text)
+                )
                 or second_sentence in used_second_sentences
                 or _is_generic_track_reason(reason)
                 or _exposes_internal_recommendation_metadata(reason)
