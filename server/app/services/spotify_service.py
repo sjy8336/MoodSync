@@ -184,6 +184,17 @@ TRACK_SOUND_HINTS: dict[tuple[str, str], tuple[str, str]] = {
     ),
 }
 
+# Curated track-style facts are used only when explaining an already selected
+# drive track. They are intentionally separate from candidate ranking tags.
+DRIVE_REASON_STYLE_TAGS: dict[tuple[str, str], tuple[str, ...]] = {
+    ("don't start now", "dua lipa"): ("dance-pop", "disco", "singalong"),
+    ("american idiot", "green day"): ("punk", "singalong"),
+    ("basket case", "green day"): ("pop-punk", "singalong"),
+    ("misery business", "paramore"): ("pop-punk", "emo-pop", "singalong"),
+    ("sugar, we're goin down", "fall out boy"): ("pop-punk", "emo"),
+    ("나는 나비", "yb"): ("rock", "artist_band", "singalong"),
+}
+
 
 def _canonical_track_token(value: str) -> str:
     """Normalize Spotify display names before matching them to curated metadata."""
@@ -445,13 +456,17 @@ def _has_valid_track_identity(track: TrackSummary) -> bool:
 
 def _build_reason_facts(name: str, artist_name: str, seed_genres: list[str] | None = None) -> dict[str, object]:
     facts = _catalog_metadata_for_track(name, artist_name)
+    drive_style_tags = DRIVE_REASON_STYLE_TAGS.get((name.strip().lower(), artist_name.strip().lower()), ())
+    if drive_style_tags:
+        facts["tags"] = list(dict.fromkeys([*facts.get("tags", []), *drive_style_tags]))
+        facts.setdefault("feature_provenance", {})["drive_style"] = "curated_track_style_metadata"
     if facts.get("tags") or facts.get("moods"):
-        facts["feature_provenance"] = {
+        facts.setdefault("feature_provenance", {}).update({
             "tags": "curated_catalog_metadata",
             "moods": "curated_catalog_metadata",
             "origin_kr": "curated_artist_identity_metadata",
             "artist_band": "curated_artist_identity_metadata",
-        }
+        })
     if facts.get("instrument_source"):
         facts.setdefault("feature_provenance", {})["instruments"] = facts["instrument_source"]
     sound_hint = TRACK_SOUND_HINTS.get((name.strip().lower(), artist_name.strip().lower()))
@@ -519,7 +534,10 @@ def _build_contextual_reason_facts(name: str, artist_name: str, context_text: st
         facts["pop_fit"] = bool(tags & {"pop", "dance-pop", "synth-pop", "pop-punk"})
         facts["punk_fit"] = bool(tags & {"punk", "pop-punk"})
         facts["pop_punk_bridge"] = "pop-punk" in tags
-        facts["singalong_fit"] = bool(tags & {"mainstream", "broad_familiarity_ko", "family_trip"})
+        facts["explicit_pop_fit"] = bool(tags & {"pop", "dance-pop", "synth-pop"}) and not facts["pop_punk_bridge"]
+        facts["explicit_punk_fit"] = "punk" in tags and not facts["pop_punk_bridge"]
+        facts["rock_adjacent_fit"] = "rock" in tags and not bool(tags & {"punk", "pop-punk"})
+        facts["singalong_fit"] = bool(tags & {"singalong", "mainstream", "broad_familiarity_ko", "family_trip"})
         facts["drive_ranking_factors"] = [
             key for key, present in (
                 ("drive", facts["drive_fit"]),
@@ -692,9 +710,9 @@ MOOD_ALIASES = {
 }
 
 FALLBACK_LIBRARY: list[dict[str, object]] = [
-    {"name": "Blinding Lights", "artist_name": "The Weeknd", "moods": ["anxious", "excited", "focused", "happy"], "tags": ["pop", "driving", "high_energy", "global_only"], "generation": "recent", "release_year": 2019, "cross_generation_fit": 1},
-    {"name": "Don't Start Now", "artist_name": "Dua Lipa", "moods": ["anxious", "excited", "happy"], "tags": ["pop", "upbeat", "high_energy", "global_only"], "generation": "recent"},
-    {"name": "Levitating", "artist_name": "Dua Lipa", "moods": ["excited", "happy"], "tags": ["pop", "upbeat", "dance", "global_only"], "generation": "recent", "release_year": 2020, "cross_generation_fit": 1},
+    {"name": "Blinding Lights", "artist_name": "The Weeknd", "moods": ["anxious", "excited", "focused", "happy"], "tags": ["pop", "synth-pop", "driving", "high_energy", "singalong", "global_only"], "generation": "recent", "release_year": 2019, "cross_generation_fit": 1},
+    {"name": "Don't Start Now", "artist_name": "Dua Lipa", "moods": ["anxious", "excited", "happy"], "tags": ["pop", "dance-pop", "disco", "upbeat", "high_energy", "singalong", "global_only"], "generation": "recent"},
+    {"name": "Levitating", "artist_name": "Dua Lipa", "moods": ["excited", "happy"], "tags": ["pop", "dance-pop", "upbeat", "dance", "singalong", "global_only"], "generation": "recent", "release_year": 2020, "cross_generation_fit": 1},
     {"name": "HUMBLE.", "artist_name": "Kendrick Lamar", "moods": ["anxious", "angry", "focused"], "tags": ["driving", "rhythmic"]},
     {"name": "Lose Yourself", "artist_name": "Eminem", "moods": ["anxious", "focused", "angry"], "tags": ["driving", "focused"]},
     {"name": "Bad Habit", "artist_name": "Steve Lacy", "moods": ["lonely", "sad", "focused"], "tags": ["rnb", "groove"]},
@@ -1008,6 +1026,7 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         selected_tracks.append({
             "display_title": track.display_title or track.name,
             "artist": track.artist_name,
+            "candidate_provenance": "current_request_catalog",
             "album": track.album_name,
             "spotify_track_name": track.spotify_track_name,
             "spotify_track_id": track.track_id if not track.track_id.startswith("fallback-") else None,
@@ -1048,6 +1067,9 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             "pop_fit": facts.get("pop_fit"),
             "punk_fit": facts.get("punk_fit"),
             "pop_punk_bridge": facts.get("pop_punk_bridge"),
+            "explicit_pop_fit": facts.get("explicit_pop_fit"),
+            "explicit_punk_fit": facts.get("explicit_punk_fit"),
+            "rock_adjacent_fit": facts.get("rock_adjacent_fit"),
             "singalong_fit": facts.get("singalong_fit"),
             "dream_pop_fit": facts.get("dream_pop_fit"),
             "synth_fit": facts.get("synth_fit"),
@@ -1110,6 +1132,7 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         "genre_bonus": 0 if not explicit_genres else 1.0,
         "drive_request": _is_drive_request(context_text),
         "previous_focus_context_reset": True,
+        "previous_candidate_pool_reused": False,
         "piano_confirmed_count": sum(
             "piano" in set((track.reason_facts or {}).get("recording_instruments") or []) for track in tracks
         ) if calm_jazz_request else 0,
@@ -1140,6 +1163,20 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         "pop_side_count": sum(bool((track.reason_facts or {}).get("pop_fit")) and not bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
         "punk_side_count": sum(bool((track.reason_facts or {}).get("punk_fit")) and not bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
         "pop_punk_bridge_count": sum(bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
+        "clear_pop_count": sum(bool((track.reason_facts or {}).get("explicit_pop_fit")) for track in tracks),
+        "punk_count": sum(bool((track.reason_facts or {}).get("explicit_punk_fit")) for track in tracks),
+        "pop_punk_count": sum(bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
+        "rock_adjacent_count": sum(bool((track.reason_facts or {}).get("rock_adjacent_fit")) for track in tracks),
+        "singalong_fit_count": sum(bool((track.reason_facts or {}).get("singalong_fit")) for track in tracks),
+        "drive_fit_count": sum(bool((track.reason_facts or {}).get("drive_fit")) for track in tracks),
+        "genre_coverage_validation": not (
+            {"pop", "punk"}.issubset(set(explicit_genres))
+            and sum(bool((track.reason_facts or {}).get("explicit_pop_fit")) for track in tracks) <= 1
+            and sum(
+                bool((track.reason_facts or {}).get("punk_fit") or (track.reason_facts or {}).get("rock_adjacent_fit"))
+                for track in tracks
+            ) >= 5
+        ),
         "dream_pop_count": sum(bool((track.reason_facts or {}).get("dream_pop_fit")) for track in tracks),
         "ambient_electronic_count": sum(
             bool({"ambient", "electronic"}.intersection({str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}))
@@ -2118,26 +2155,43 @@ def _korean_band_rock_feature_sentence(track_tags: list[str], index: int = 0) ->
 def _drive_feature_sentence(track_tags: list[str], index: int = 0) -> str | None:
     """Describe a supplied drive/genre feature without promising an effect."""
     tags = {str(tag).lower() for tag in track_tags if tag}
-    feature_sentences: list[str] = []
     if "pop-punk" in tags:
-        feature_sentences.append("팝과 펑크의 성격이 함께 드러나는 팝펑크 곡이에요.")
+        return "팝과 펑크의 성격이 함께 드러나는 팝펑크 곡이에요."
     if "punk" in tags:
-        feature_sentences.append("강한 밴드 사운드가 중심인 펑크 록 곡이에요.")
-        feature_sentences.append("펑크 록 특유의 직선적인 사운드가 분명한 곡이에요.")
-        feature_sentences.append("펑크 성향의 록 사운드가 중심인 곡이에요.")
-    if "pop" in tags or "dance-pop" in tags or "synth-pop" in tags:
-        feature_sentences.append("밝고 신나는 팝 분위기가 또렷한 곡이에요.")
+        return "펑크 록 성격이 분명한 밴드 곡이에요."
+    if "dance-pop" in tags:
+        return "댄스 팝 성격이 또렷한 곡이에요."
+    if "synth-pop" in tags:
+        return "신스팝 성격이 또렷한 곡이에요."
+    if "pop" in tags:
+        return "팝 성격이 분명한 곡이에요."
     if "rock" in tags:
-        feature_sentences.append(
-            "밴드 중심의 록 사운드가 있는 곡이에요."
-            if "artist_band" in tags
-            else "록 사운드가 중심인 곡이에요."
-        )
+        return "밴드 중심의 록 사운드가 있는 곡이에요." if "artist_band" in tags else "록 사운드가 중심인 곡이에요."
     if "high_energy" in tags or "driving" in tags:
-        feature_sentences.append("에너지 있는 분위기가 분명한 곡이에요.")
+        return "강한 에너지가 느껴지는 곡이에요."
     if "upbeat" in tags:
-        feature_sentences.append("밝고 경쾌한 분위기가 이어지는 곡이에요.")
-    return feature_sentences[index % len(feature_sentences)] if feature_sentences else None
+        return "밝고 경쾌한 분위기의 곡이에요."
+    return None
+
+
+def _drive_listening_role(track_tags: list[str], index: int) -> str:
+    """Map verified drive styles to distinct listening situations, not effects."""
+    tags = {str(tag).lower() for tag in track_tags if tag}
+    if "dance-pop" in tags or "synth-pop" in tags:
+        return "주말 드라이브를 시작하며 팝 음악을 먼저 듣고 싶을 때 잘 어울려요."
+    if "punk" in tags and "pop-punk" not in tags:
+        return "이동 중 조금 더 강한 밴드 사운드를 찾는 구간에 듣기 좋아요."
+    if "pop-punk" in tags and "singalong" in tags:
+        return "창문을 열고 함께 따라 부를 만한 밴드 음악을 찾을 때 잘 맞아요."
+    if "pop-punk" in tags:
+        return "팝과 펑크 사이의 멜로디 있는 밴드 곡을 이어 듣고 싶을 때 어울려요."
+    if "rock" in tags and "artist_band" in tags:
+        return "장거리 이동 중 밴드 사운드로 분위기를 한 번 바꾸고 싶을 때 듣기 좋아요."
+    return (
+        "도로 위에서 팝과 펑크를 번갈아 듣고 싶은 순간에 잘 맞아요."
+        if index % 2
+        else "장거리 드라이브에 활기 있는 음악을 이어 듣고 싶을 때 잘 어울려요."
+    )
 
 
 def _dream_pop_synth_feature_sentence(track_tags: list[str], index: int = 0) -> str | None:
@@ -2228,7 +2282,7 @@ def build_track_reason(
             track_tags, index if reason_feature_index is None else reason_feature_index
         )
         if drive_feature:
-            return f"{drive_feature} {_role_listening_sentence(recommendation_role, index)}"
+            return f"{drive_feature} {_drive_listening_role(track_tags, index)}"
     if _is_calm_jazz_instrument_request(context_text):
         jazz_feature = _jazz_instrument_feature_sentence(
             facts, index if reason_feature_index is None else reason_feature_index
@@ -2935,23 +2989,20 @@ def _select_fallback_catalog(
     candidate_pool = ranked[: max(limit * 3, limit)]
     genre_coverage_candidates: list[dict[str, object]] = []
     if {"pop", "punk"}.issubset(explicit_genre_set):
-        pure_pop = next(
-            (
-                candidate
-                for candidate in ranked
-                if "pop" in {str(tag).lower() for tag in candidate.get("tags", []) if tag}
-                and not {"punk", "pop-punk", "rock"}.intersection(
+        pure_pop_candidates = [
+            candidate
+            for candidate in ranked
+            if "pop" in {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+            and not {"punk", "pop-punk", "rock"}.intersection(
+                {str(tag).lower() for tag in candidate.get("tags", []) if tag}
+            )
+            and (
+                not _is_drive_request(context_text)
+                or {"upbeat", "high_energy", "driving"}.intersection(
                     {str(tag).lower() for tag in candidate.get("tags", []) if tag}
                 )
-                and (
-                    not _is_drive_request(context_text)
-                    or {"upbeat", "high_energy", "driving"}.intersection(
-                        {str(tag).lower() for tag in candidate.get("tags", []) if tag}
-                    )
-                )
-            ),
-            None,
-        )
+            )
+        ]
         punk_side = next(
             (
                 candidate
@@ -2959,11 +3010,13 @@ def _select_fallback_catalog(
                 if {"punk", "rock", "pop-punk"}.intersection(
                     {str(tag).lower() for tag in candidate.get("tags", []) if tag}
                 )
-                and candidate is not pure_pop
+                and candidate not in pure_pop_candidates
             ),
             None,
         )
-        genre_coverage_candidates = [candidate for candidate in (pure_pop, punk_side) if candidate]
+        # A pop-punk bridge cannot replace both explicitly requested genre axes.
+        # Reserve two clear-pop options when the ranked pool actually has them.
+        genre_coverage_candidates = [*pure_pop_candidates[:2], *([punk_side] if punk_side else [])]
     category_counts: dict[str, int] = {}
     for candidate in genre_coverage_candidates + candidate_pool:
         key = (str(candidate.get("name") or ""), str(candidate.get("artist_name") or ""))

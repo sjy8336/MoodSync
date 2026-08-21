@@ -73,6 +73,41 @@ class GeminiRecommendationCopyTests(unittest.TestCase):
         self.assertEqual(len(catalog), 6)
         self.assertNotEqual(catalog[0]["name"], "Take Five")
 
+    def test_drive_request_keeps_clear_pop_separate_from_pop_punk_bridges(self) -> None:
+        text = (
+            "주말에 차 타고 멀리 나갈 예정이에요. 창문을 열고 따라 부르기 좋고, "
+            "도로 위에서 텐션을 올려주는 팝과 펑크 음악이 듣고 싶어요."
+        )
+        catalog = _select_fallback_catalog("excited", text, 6)
+        tag_sets = [set(item.get("tags", [])) for item in catalog]
+        clear_pop_count = sum("pop" in tags and not tags & {"punk", "pop-punk", "rock"} for tags in tag_sets)
+        punk_count = sum(bool(tags & {"punk", "pop-punk"}) for tags in tag_sets)
+
+        self.assertGreaterEqual(clear_pop_count, 2)
+        self.assertGreaterEqual(punk_count, 1)
+
+    def test_drive_reason_uses_style_before_generic_energy_and_roles_differ(self) -> None:
+        text = "주말에 차 타고 멀리 나갈 예정이에요. 창문을 열고 따라 부르기 좋은 팝과 펑크 음악이 듣고 싶어요."
+        pop_track = TrackSummary(
+            track_id="drive-pop",
+            name="Don't Start Now",
+            artist_name="Dua Lipa",
+            reason_facts={"tags": ["pop", "dance-pop", "disco", "singalong"]},
+        )
+        punk_track = TrackSummary(
+            track_id="drive-punk",
+            name="American Idiot",
+            artist_name="Green Day",
+            reason_facts={"tags": ["punk", "rock", "singalong"]},
+        )
+
+        pop_reason = build_track_reason(pop_track, "excited", text, 0)
+        punk_reason = build_track_reason(punk_track, "excited", text, 1)
+
+        self.assertIn("댄스 팝", pop_reason)
+        self.assertIn("펑크 록", punk_reason)
+        self.assertNotEqual(pop_reason.split(". ")[1], punk_reason.split(". ")[1])
+
     def test_focus_request_resets_genre_and_does_not_reuse_jazz_pool(self) -> None:
         text = (
             "오늘은 노트북 앞에서 오래 앉아 있을 예정이라, 너무 산만하지 않고 "
