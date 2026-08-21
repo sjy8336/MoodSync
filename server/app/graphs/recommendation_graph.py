@@ -39,6 +39,7 @@ from app.services.spotify_service import (
     _is_calm_jazz_instrument_request,
     _is_dream_pop_synth_request,
     _is_drive_request,
+    _is_long_focus_request,
     _korean_band_rock_preference_strength,
     build_selection_debug,
     _split_context,
@@ -166,6 +167,11 @@ def _overstates_listening_effect(reason: str) -> bool:
         "마음을 안아",
         "감정을 보듬",
         "위로를 건네",
+        "집중력을 높",
+        "몰입을 유지",
+        "몰입 흐름을 유지",
+        "흐름을 유지시",
+        "산만함을 막",
     )
     return any(marker in lowered for marker in outcome_markers)
 
@@ -287,7 +293,19 @@ def _leaks_long_focus_context(reason: str, input_text: str) -> bool:
         )
     if not is_long_focus:
         return False
-    return any(marker in reason for marker in ("잠시 쉬어가며", "해야 할 일", "공부 흐름", "집중이 흔들", "페이스를 잡"))
+    return any(marker in reason for marker in (
+        "잠시 쉬어가며", "해야 할 일", "공부 흐름", "집중이 흔들", "페이스를 잡",
+        "한 가지 흐름에 머물", "음악이 앞에 나서지 않는 분위기로", "일정한 간격",
+    ))
+
+
+def _repeats_long_focus_feature_in_role(reason: str, input_text: str) -> bool:
+    """Keep a focus reason's track fact separate from its listening role."""
+    if not _is_long_focus_request(input_text):
+        return False
+    first = _first_sentence_signature(reason)
+    second = _second_sentence_signature(reason)
+    return "차분" in first and "차분" in second
 
 
 def _uses_repetitive_or_abstract_language(reason: str) -> bool:
@@ -623,6 +641,7 @@ def _apply_recommendation_copy(
                 or _uses_formal_recommendation_style(reason)
                 or _has_incomplete_reason_sentence(reason)
                 or _leaks_long_focus_context(reason, input_text)
+                or _repeats_long_focus_feature_in_role(reason, input_text)
                 or _uses_repetitive_or_abstract_language(reason)
                 or _repeats_time_clause(reason)
                 or not _has_two_sentence_reason_structure(reason)

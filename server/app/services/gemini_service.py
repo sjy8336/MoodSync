@@ -86,13 +86,13 @@ _STUDY_FLOW_ROLES = [
 
 _LONG_FOCUS_ROLES = [
     ("장시간 틀어두기", "노트북 앞에 오래 앉아 음악을 틀어두고 싶을 때"),
-    ("차분한 흐름 유지", "긴 시간 한 가지 흐름에 머물며 듣고 싶을 때"),
+    ("차분한 흐름 유지", "긴 시간 잔잔한 재즈를 이어 듣고 싶을 때"),
     ("가벼운 리듬 더하기", "잔잔함을 유지하면서 리듬감을 조금 더하고 싶을 때"),
-    ("낮은 자극으로 배경 유지", "음악이 지나치게 앞에 나서지 않는 분위기를 원할 때"),
-    ("단조로움 줄이기", "차분한 흐름 안에서 작은 리듬 변화를 듣고 싶을 때"),
+    ("낮은 자극으로 배경 유지", "노트북 앞에 오래 앉아 잔잔한 연주를 틀어두고 싶을 때"),
+    ("단조로움 줄이기", "너무 단조롭지 않은 배경 음악을 원할 때"),
     ("긴 청취에 맞추기", "오래 이어 들어도 강한 자극을 피하고 싶을 때"),
-    ("차분한 배경으로 이어 듣기", "음악이 앞에 나서지 않는 분위기로 오래 듣고 싶을 때"),
-    ("집중 흐름에 무리 없이 맞추기", "차분한 흐름을 오래 이어가고 싶을 때"),
+    ("차분한 배경으로 이어 듣기", "오래 음악을 틀어두고 싶을 때"),
+    ("집중 흐름에 무리 없이 맞추기", "긴 시간 잔잔한 곡을 이어 듣고 싶을 때"),
 ]
 
 _CALM_JAZZ_ROLES = [
@@ -861,8 +861,10 @@ def generate_recommendation_copy(
         "Do not use recommendation_role itself as the first sentence. Also compare the two family-trip sentences before returning: if both describe the same idea such as travel excitement, keeping the car bright, or a summer mood, rewrite sentence 1 with the supplied primary feature instead.\n"
         "In family-trip reasons, do not reuse energy as the default first-sentence feature. Distribute the six verified anchors across shared familiarity, family travel fit, summer travel fit, and at most two upbeat moments. The second sentence must not explain metadata; it must only explain the distinct travel role.\n"
         "If verified metadata says high energy while the user wants less stimulation, do not claim that the track is not stimulating. Describe it only as a fit for a brief refresh or a moment when the user wants to raise the tempo.\n"
-        "Do not say that music 'helps immersion' or 'helps concentration'. In the summary, describe only the listening context, such as '공부 흐름을 이어가면서 과하지 않은 활기를 더하기 좋은 음악들이에요'.\n"
-        "Do not claim that music prevents distraction, maintains concentration, or improves study efficiency. Use listening-context wording such as '현재 공부 흐름을 이어가면서 듣기 좋아요' or '강한 자극보다 일정한 분위기로 이어 듣고 싶을 때 어울려요'.\n"
+        "Do not say that music 'helps immersion' or 'helps concentration'. Never claim that music prevents distraction, maintains concentration, or improves study efficiency.\n"
+        "For a long laptop/focus session, the summary must aggregate only supplied playlist facts: low-stimulation or calm anchors, piano or ambient tracks when supplied, and a light-rhythm track only when at least one supplied track has light_rhythm_fit. Never describe the entire playlist as having a steady rhythm unless every supplied fact supports that claim. Do not write '집중할 수 있도록', '몰입을 유지', '집중력을 높여', '흐름을 유지시켜', or '산만함을 막아'.\n"
+        "For a long laptop/focus reason, sentence 1 must use a verified genre, instrumentation, or rhythm fact before a generic mood. Sentence 2 must describe a direct listening moment such as keeping music on during a long laptop session, wanting a calm instrumental, wanting background music that is not too monotonous, or wanting a little rhythm. Do not write '한 가지 흐름에 머물며', '음악이 앞에 나서지 않는 분위기로', '일정한 간격으로', or '차분하게 가라앉는'. If sentence 1 says '차분한', sentence 2 must not repeat '차분한'.\n"
+        "For an ambiguous title such as '1/1', use only the supplied exact identity and verified_reason_facts. Do not infer an artist, album, piano, synthesizer, loop, or recording detail from the title. When exact instrumentation is not verified, use a short genre or supplied-tag description instead.\n"
         "When user_text contains a concrete life context such as job searching, an interview, a breakup, or exhaustion, name that context naturally in message.\n"
         "Keep the user's timeline accurate. Words such as '어제', '어젯밤', and '지난밤' describe a past cause, not the current time. If the user says they want to rest now, describe the current context as '지금 잠시 쉬려는 상황', never as if it is currently night unless the user explicitly says so.\n"
         "For job-search anxiety, acknowledge the pressure or uncertainty of the job search and focus on settling the mind or regaining a steady pace.\n"

@@ -931,6 +931,7 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         requested_genre_axes.append("pop-punk")
     current_genre = explicit_genres[0] if explicit_genres else None
     dream_pop_synth_request = _is_dream_pop_synth_request(context_text)
+    long_focus_request = _is_long_focus_request(context_text)
     selected_tracks = []
     for track in tracks:
         facts = track.reason_facts or {}
@@ -984,6 +985,24 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             ),
             "final_ranking_score": facts.get("final_ranking_score"),
         })
+    focus_role_counts = {
+        "calm_anchor": sum(
+            bool((track.reason_facts or {}).get("low_stimulation_fit"))
+            and not bool((track.reason_facts or {}).get("light_rhythm_fit"))
+            for track in tracks
+        ),
+        "light_rhythm": sum(bool((track.reason_facts or {}).get("light_rhythm_fit")) for track in tracks),
+        "ambient_anchor": sum(
+            bool((track.reason_facts or {}).get("low_stimulation_fit"))
+            and "ambient" in {str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}
+            for track in tracks
+        ),
+        "piano_anchor": sum(
+            bool((track.reason_facts or {}).get("low_stimulation_fit"))
+            and "piano" in {str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}
+            for track in tracks
+        ),
+    }
     return {
         "previous_request_genre": None,
         "previous_request_explicit_genre": None,
@@ -1011,6 +1030,11 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         "genre_bonus": 0 if not explicit_genres else 1.0,
         "drive_request": _is_drive_request(context_text),
         "previous_focus_context_reset": True,
+        "calm_anchor_count": focus_role_counts["calm_anchor"] if long_focus_request else 0,
+        "light_rhythm_count": focus_role_counts["light_rhythm"] if long_focus_request else 0,
+        "ambient_anchor_count": focus_role_counts["ambient_anchor"] if long_focus_request else 0,
+        "piano_anchor_count": focus_role_counts["piano_anchor"] if long_focus_request else 0,
+        "role_overlap": focus_role_counts if long_focus_request else {},
         "previous_artist_origin_preference_reset": True,
         "selected_track_count": len(tracks),
         "pop_side_count": sum(bool((track.reason_facts or {}).get("pop_fit")) and not bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
@@ -1564,20 +1588,25 @@ def build_recommendation_message(
         )
         return f"오늘처럼 조금 지친 상태에서 차분하게 들을 수 있는 재즈 곡들을 중심으로 골라봤어요. {rhythm_clause}"
 
-    if study_flow_request and avoids_overstimulation:
+    if study_flow_request and avoids_overstimulation and not long_focus_request:
         return "지금의 좋은 집중 흐름은 유지하면서도 너무 과하지 않게 활기를 더할 수 있는 곡들을 골라봤어요."
 
     if long_focus_request:
         focus_facts = [track.reason_facts or {} for track in (tracks or [])]
-        calm_count = sum(bool(facts.get("calm_fit")) for facts in focus_facts)
+        calm_count = sum(bool(facts.get("low_stimulation_fit") or facts.get("calm_fit")) for facts in focus_facts)
         light_rhythm_count = sum(bool(facts.get("light_rhythm_fit")) for facts in focus_facts)
-        rhythm_clause = (
-            "일부 곡에는 가벼운 리듬감도 확인돼요."
-            if light_rhythm_count
-            else "리듬감이 확인되지 않은 곡의 특징은 임의로 덧붙이지 않았어요."
-        )
-        calm_clause = "차분한 곡들을 중심으로" if calm_count else "오래 이어 듣기 부담이 적은 곡들을 중심으로"
-        return f"노트북 앞에 오래 앉아 있을 때 {calm_clause} 골라봤어요. {rhythm_clause}"
+        piano_count = sum("piano" in {str(tag).lower() for tag in facts.get("tags", []) if tag} for facts in focus_facts)
+        ambient_count = sum("ambient" in {str(tag).lower() for tag in facts.get("tags", []) if tag} for facts in focus_facts)
+        anchor_clause = "차분한 곡들을 중심으로" if calm_count else "부담 없이 이어 듣기 좋은 곡들을 중심으로"
+        if light_rhythm_count:
+            mix_clause = "잔잔한 연주를 중심으로, 너무 단조롭지 않게 가벼운 리듬감이 느껴지는 곡도 함께 담았어요."
+        elif piano_count and ambient_count:
+            mix_clause = "피아노 연주와 앰비언트 곡을 함께 담았어요."
+        elif piano_count:
+            mix_clause = "피아노 중심의 연주곡도 함께 담았어요."
+        else:
+            mix_clause = "오래 틀어두기 좋은 곡들로 구성했어요."
+        return f"노트북 앞에 오래 앉아 있을 때 {anchor_clause} 골라봤어요. {mix_clause}"
 
     if _is_drive_request(context_text) and not _is_family_trip_request(context_text):
         return (
@@ -1718,13 +1747,13 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
         "밴드 사운드에 몰입하기": "강렬한 밴드 음악에 집중해 듣고 싶을 때 잘 맞아요.",
         "기분을 확 바꾸기": "지금의 기분을 빠르게 전환하고 싶을 때 어울려요.",
         "장시간 틀어두기": "노트북 앞에 오래 앉아 음악을 틀어두고 싶을 때 듣기 좋아요.",
-        "차분한 흐름 유지": "긴 시간 차분한 음악을 이어 듣고 싶을 때 잘 맞아요.",
+        "차분한 흐름 유지": "긴 시간 잔잔한 재즈를 이어 듣고 싶을 때 잘 맞아요.",
         "가벼운 리듬 더하기": "잔잔함을 유지하면서 리듬감을 조금 더하고 싶을 때 어울려요.",
-        "낮은 자극으로 배경 유지": "음악이 지나치게 앞에 나서지 않는 분위기를 원할 때 듣기 좋아요.",
-        "단조로움 줄이기": "차분한 흐름 안에서 작은 리듬 변화를 듣고 싶을 때 잘 맞아요.",
+        "낮은 자극으로 배경 유지": "노트북 앞에 오래 앉아 잔잔한 연주를 틀어두고 싶을 때 듣기 좋아요.",
+        "단조로움 줄이기": "너무 단조롭지 않은 배경 음악을 원할 때 잘 맞아요.",
         "긴 청취에 맞추기": "오래 이어 들어도 강한 자극을 피하고 싶을 때 어울려요.",
-        "차분한 배경으로 이어 듣기": "음악이 앞에 나서지 않는 분위기로 오래 듣고 싶을 때 잘 맞아요.",
-        "집중 흐름에 무리 없이 맞추기": "차분한 음악을 오래 이어 듣고 싶을 때 잘 맞아요.",
+        "차분한 배경으로 이어 듣기": "오래 음악을 틀어두고 싶을 때 잘 맞아요.",
+        "집중 흐름에 무리 없이 맞추기": "긴 시간 잔잔한 곡을 이어 듣고 싶을 때 잘 맞아요.",
         "리듬 변화 듣기": "차분한 곡들 사이에서 리듬이 조금 더 있는 재즈를 듣고 싶을 때 잘 맞아요.",
         "재즈의 박자감 느끼기": "느긋한 곡만 이어지지 않도록 박자감에 작은 변화를 주고 싶을 때 잘 어울려요.",
         "가벼운 재즈 리듬 더하기": "차분한 분위기를 유지하면서 가벼운 리듬을 더하고 싶을 때 잘 맞아요.",
@@ -1876,10 +1905,12 @@ def _focus_feature_sentence(track_tags: list[str], track_moods: list[str]) -> st
         return "재즈 연주가 중심인 곡이에요."
     if "piano" in tags and "instrumental" in tags:
         return "피아노 중심의 연주곡이에요."
+    if "ambient" in tags and "instrumental" in tags:
+        return "앰비언트 연주가 중심인 곡이에요."
     if "calm" in moods or "calm" in tags:
         return "차분한 분위기의 곡이에요."
     if "soft" in tags:
-        return "부드러운 분위기가 오래 이어 듣기 좋은 곡이에요."
+        return "부드러운 분위기의 곡이에요."
     if "focused" in moods or "focused" in tags:
         return "일정한 분위기가 이어지는 곡이에요."
     return None
