@@ -195,7 +195,8 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
     raw_text = text or ""
     lowered = raw_text.lower()
     # "몰입감 있는 음악" is a sound preference, not evidence of study/work.
-    is_studying = any(token in raw_text or token in lowered for token in ("공부", "과제", "작업", "업무", "노트북 앞"))
+    # A laptop is a listening setting, not evidence that the user is studying or working.
+    is_studying = any(token in raw_text or token in lowered for token in ("공부", "과제", "작업", "업무"))
     is_long_focus = any(token in raw_text or token in lowered for token in ("오래 앉", "오랫동안", "장시간", "노트북 앞")) and any(token in raw_text or token in lowered for token in ("몰입", "집중", "산만하지"))
     avoids_overstimulation = any(
         token in raw_text or token in lowered
@@ -299,8 +300,8 @@ def _build_listening_request_context(text: str | None, selected_vibes: list[str]
     elif is_long_focus:
         context["context"] = "장시간 이어 듣는 집중 세션"
         context["current_state"] = ["노트북 앞에 오래 앉아 있을 예정", "장시간 집중이 필요한 상태"]
-        context["goal"] = ["몰입 흐름을 오래 이어가기", "잔잔함 속에 가벼운 리듬감 유지"]
-        context["avoid"] = ["지나치게 높은 자극", "산만하거나 공격적인 분위기", "쉬어가기 중심의 설명"]
+        context["goal"] = ["긴 시간 음악 듣기", "잔잔함 속에 가벼운 리듬감 듣기"]
+        context["avoid"] = ["지나치게 높은 자극", "복잡하거나 공격적인 분위기", "쉬어가기 중심의 설명"]
         context["priority"] = ["낮은 자극", "차분한 분위기", "가벼운 리듬감", "장시간 청취 적합성"]
     elif is_studying and is_going_well:
         context["current_state"] = ["이미 집중 흐름이 이어지고 있음", "기분 좋게 몰입 중"]
@@ -921,10 +922,11 @@ def generate_recommendation_copy(
         "If verified metadata says high energy while the user wants less stimulation, do not claim that the track is not stimulating. Describe it only as a fit for a brief refresh or a moment when the user wants to raise the tempo.\n"
         "Do not say that music 'helps immersion' or 'helps concentration'. Never claim that music prevents distraction, maintains concentration, or improves study efficiency.\n"
         "For a long laptop/focus session, the summary must aggregate only supplied playlist facts: low-stimulation or calm anchors, piano or ambient tracks when supplied, and a light-rhythm track only when at least one supplied track has light_rhythm_fit. Never describe the entire playlist as having a steady rhythm unless every supplied fact supports that claim. Do not write '집중할 수 있도록', '몰입을 유지', '집중력을 높여', '흐름을 유지시켜', or '산만함을 막아'.\n"
+        "A laptop alone does not mean study or work. Unless user_text explicitly mentions study, work, assignments, coding, or tasks, do not write 공부, 작업, 업무, 과제, 코딩, or 해야 할 일 in a long-focus summary or reason.\n"
         "For a long laptop/focus reason, sentence 1 must use a verified genre, instrumentation, or rhythm fact before a generic mood. Sentence 2 must describe a direct listening moment such as keeping music on during a long laptop session, wanting a calm instrumental, wanting background music that is not too monotonous, or wanting a little rhythm. Do not write '한 가지 흐름에 머물며', '음악이 앞에 나서지 않는 분위기로', '일정한 간격으로', or '차분하게 가라앉는'. If sentence 1 says '차분한', sentence 2 must not repeat '차분한'.\n"
         "For a long laptop/focus playlist, reason_ingredient is code-selected factual planning data. Sentence 1 must use its primary_feature instead of replacing it with '차분한', '잔잔한', '몽환적인', or '감성적인'. For example, preserve a supplied bossa-nova light-rhythm feature, a jazz-standard feature, a piano-instrumental feature, or an ambient-instrumental feature. Use piano plus saxophone only when the supplied ingredient says that exact instrumentation was verified.\n"
         "When a long-focus reason_ingredient has distinctive_feature_available=true, do not shorten it to a generic mood or genre sentence. Use the supplied primary_feature naturally. When it is false, stay short and accurate rather than adding poetic or inferred detail.\n"
-        "For an ambiguous title such as '1/1', use only the supplied exact identity and verified_reason_facts. Do not infer an artist, album, piano, synthesizer, loop, or recording detail from the title. When exact instrumentation is not verified, use a short genre or supplied-tag description instead.\n"
+        "For an ambiguous title such as '1/1', use only the supplied exact identity and verified_reason_facts. Do not infer an artist, album, piano, synthesizer, loop, or recording detail from the title. When exact instrumentation is verified, use its most distinctive one or two facts; otherwise use a short genre or supplied-tag description instead.\n"
         "When user_text contains a concrete life context such as job searching, an interview, a breakup, or exhaustion, name that context naturally in message.\n"
         "Keep the user's timeline accurate. Words such as '어제', '어젯밤', and '지난밤' describe a past cause, not the current time. If the user says they want to rest now, describe the current context as '지금 잠시 쉬려는 상황', never as if it is currently night unless the user explicitly says so.\n"
         "For job-search anxiety, acknowledge the pressure or uncertainty of the job search and focus on settling the mind or regaining a steady pace.\n"

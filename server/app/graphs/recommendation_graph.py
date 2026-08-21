@@ -301,10 +301,14 @@ def _leaks_long_focus_context(reason: str, input_text: str) -> bool:
         )
     if not is_long_focus:
         return False
-    return any(marker in reason for marker in (
+    has_explicit_study_or_work = any(marker in input_text for marker in ("공부", "작업", "업무", "과제", "코딩", "해야 할 일"))
+    blocked_markers = [
         "잠시 쉬어가며", "해야 할 일", "공부 흐름", "집중이 흔들", "페이스를 잡",
         "한 가지 흐름에 머물", "음악이 앞에 나서지 않는 분위기로", "일정한 간격",
-    ))
+    ]
+    if not has_explicit_study_or_work:
+        blocked_markers.extend(["공부", "작업", "업무", "과제", "코딩"])
+    return any(marker in reason for marker in blocked_markers)
 
 
 def _repeats_long_focus_feature_in_role(reason: str, input_text: str) -> bool:
@@ -426,6 +430,8 @@ def _uses_repetitive_or_abstract_language(reason: str) -> bool:
         "에너지 넘치는",
         "펼쳐지는 곡",
         "매력을 담은",
+        "연주로 이루어진 곡",
+        "연주로 구성된 곡",
     )
     repeated_descriptor_patterns = (
         r"부드.{0,24}부드",
@@ -657,6 +663,18 @@ def _is_safe_recommendation_message(
         for marker in ("텐션을 높여", "텐션을 올려", "기분을 끌어올려", "채워줄", "떠나보세요")
     ):
         return False
+
+    if _is_long_focus_request(input_text):
+        has_explicit_study_or_work = any(
+            marker in input_text for marker in ("공부", "작업", "업무", "과제", "코딩", "해야 할 일")
+        )
+        focus_effect_markers = ("몰입을 유지", "집중을 유지", "집중력을 높", "산만함을 막", "집중할 수 있도록")
+        if any(marker in message for marker in focus_effect_markers):
+            return False
+        if not has_explicit_study_or_work and any(
+            marker in message for marker in ("공부", "작업", "업무", "과제", "코딩", "해야 할 일")
+        ):
+            return False
 
     # Explicitly selected moods must remain visible in dawn/sentimental summaries;
     # MBTI-derived aesthetic terms must not replace them.
