@@ -935,6 +935,14 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
     selected_tracks = []
     for track in tracks:
         facts = track.reason_facts or {}
+        track_tags = {str(tag).lower() for tag in facts.get("tags", []) if tag}
+        factual_feature_count = sum(
+            tag in track_tags
+            for tag in ("bossa-nova", "jazz", "standard", "piano", "ambient", "instrumental", "rhythmic_light", "groove")
+        ) + len(facts.get("recording_instruments") or [])
+        distinctive_feature_available = bool(
+            track_tags & {"bossa-nova", "standard", "piano", "ambient", "rhythmic_light", "groove"}
+        )
         selected_tracks.append({
             "display_title": track.display_title or track.name,
             "artist": track.artist_name,
@@ -952,6 +960,8 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
                 "moods": facts.get("moods", []),
                 "feature_provenance": facts.get("feature_provenance", {}),
             },
+            "factual_feature_count": factual_feature_count,
+            "distinctive_feature_available": distinctive_feature_available,
             "low_stimulation_fit": facts.get("low_stimulation_fit"),
             "relaxed_fit": facts.get("relaxed_fit"),
             "relaxed_flow_fit": facts.get("relaxed_flow_fit"),

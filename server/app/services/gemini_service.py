@@ -607,6 +607,10 @@ def _long_focus_reason_ingredient(facts: object, role: dict[str, str]) -> dict[s
         if str(item).strip()
     }
     instrumentation_verified = facts.get("instrumentation_verification") == "recording_metadata"
+    factual_feature_count = sum(
+        tag in tags
+        for tag in ("bossa-nova", "jazz", "standard", "piano", "ambient", "instrumental", "rhythmic_light", "groove")
+    ) + len(verified_instruments)
 
     if "bossa-nova" in tags:
         feature = "보사노바 계열의 가벼운 리듬이 이어지는 재즈 연주"
@@ -639,6 +643,8 @@ def _long_focus_reason_ingredient(facts: object, role: dict[str, str]) -> dict[s
         "primary_feature": feature,
         "feature_source": source,
         "feature_provenance": "recording_metadata" if instrumentation_verified else "track_metadata",
+        "factual_feature_count": factual_feature_count,
+        "distinctive_feature_available": source not in {"jazz_instrumental", "ambient", "light_rhythm"},
         "recommendation_role": role.get("focus", ""),
     }
 
@@ -917,6 +923,7 @@ def generate_recommendation_copy(
         "For a long laptop/focus session, the summary must aggregate only supplied playlist facts: low-stimulation or calm anchors, piano or ambient tracks when supplied, and a light-rhythm track only when at least one supplied track has light_rhythm_fit. Never describe the entire playlist as having a steady rhythm unless every supplied fact supports that claim. Do not write '집중할 수 있도록', '몰입을 유지', '집중력을 높여', '흐름을 유지시켜', or '산만함을 막아'.\n"
         "For a long laptop/focus reason, sentence 1 must use a verified genre, instrumentation, or rhythm fact before a generic mood. Sentence 2 must describe a direct listening moment such as keeping music on during a long laptop session, wanting a calm instrumental, wanting background music that is not too monotonous, or wanting a little rhythm. Do not write '한 가지 흐름에 머물며', '음악이 앞에 나서지 않는 분위기로', '일정한 간격으로', or '차분하게 가라앉는'. If sentence 1 says '차분한', sentence 2 must not repeat '차분한'.\n"
         "For a long laptop/focus playlist, reason_ingredient is code-selected factual planning data. Sentence 1 must use its primary_feature instead of replacing it with '차분한', '잔잔한', '몽환적인', or '감성적인'. For example, preserve a supplied bossa-nova light-rhythm feature, a jazz-standard feature, a piano-instrumental feature, or an ambient-instrumental feature. Use piano plus saxophone only when the supplied ingredient says that exact instrumentation was verified.\n"
+        "When a long-focus reason_ingredient has distinctive_feature_available=true, do not shorten it to a generic mood or genre sentence. Use the supplied primary_feature naturally. When it is false, stay short and accurate rather than adding poetic or inferred detail.\n"
         "For an ambiguous title such as '1/1', use only the supplied exact identity and verified_reason_facts. Do not infer an artist, album, piano, synthesizer, loop, or recording detail from the title. When exact instrumentation is not verified, use a short genre or supplied-tag description instead.\n"
         "When user_text contains a concrete life context such as job searching, an interview, a breakup, or exhaustion, name that context naturally in message.\n"
         "Keep the user's timeline accurate. Words such as '어제', '어젯밤', and '지난밤' describe a past cause, not the current time. If the user says they want to rest now, describe the current context as '지금 잠시 쉬려는 상황', never as if it is currently night unless the user explicitly says so.\n"

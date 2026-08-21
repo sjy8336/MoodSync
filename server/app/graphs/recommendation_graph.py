@@ -90,6 +90,14 @@ class RecommendationWorkflowState(TypedDict, total=False):
     recommendation: Any
 
 
+def _normalize_user_facing_korean_copy(text: object) -> str:
+    """Correct safe spacing variants without changing the recommendation's meaning."""
+    normalized = str(text or "").strip()
+    normalized = re.sub(r"연주\s+곡", "연주곡", normalized)
+    normalized = re.sub(r"앰비언트\s+연주곡", "앰비언트 연주곡", normalized)
+    return normalized
+
+
 def _is_generic_track_reason(reason: str) -> bool:
     lowered = reason.lower()
     generic_markers = [
@@ -642,7 +650,7 @@ def _apply_recommendation_copy(
         for item in copy_reasons:
             if not isinstance(item, dict) or str(item.get("track_id")) != track.track_id:
                 continue
-            reason = str(item.get("reason") or "").strip()
+            reason = _normalize_user_facing_korean_copy(item.get("reason"))
             first_sentence = _first_sentence_signature(reason)
             second_sentence = _second_sentence_signature(reason)
             if (
@@ -963,13 +971,14 @@ def _compose_copy_and_track_reasons(state: RecommendationWorkflowState) -> dict[
             gemini_copy_error = str(exc)
             recommendation_copy = None
 
+    gemini_message = _normalize_user_facing_korean_copy(recommendation_copy.get("message")) if recommendation_copy else ""
     message = (
-        recommendation_copy.get("message")
+        gemini_message
         if recommendation_copy
         and _is_safe_recommendation_message(
-            recommendation_copy.get("message"), input_text, selected_vibes
+            gemini_message, input_text, selected_vibes
         )
-        else build_recommendation_message(mood, input_text, len(tracks), tracks)
+        else _normalize_user_facing_korean_copy(build_recommendation_message(mood, input_text, len(tracks), tracks))
     )
     enriched_tracks, reason_map = _apply_recommendation_copy(tracks, recommendation_copy, mood, input_text)
     parsed_reason_count = len(
@@ -1106,7 +1115,7 @@ def complete_recommendation_copy(recommendation_id: int) -> None:
             input_text,
             selected_vibes or recommendation.selected_vibes or [],
         ):
-            recommendation.message = str(recommendation_copy["message"])
+            recommendation.message = _normalize_user_facing_korean_copy(recommendation_copy["message"])
         recommendation.tracks = [track.model_dump(mode="json", exclude_none=True) for track in enriched_tracks]
         profile = dict(recommendation.generation_profile or {})
         profile.update(
