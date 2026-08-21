@@ -218,9 +218,16 @@ def _uses_unnatural_recommendation_language(reason: str) -> bool:
         "재즈 계열의 리듬, 연주곡",
         "감정적이지만",
         "감정적인 분위기",
+        "감정적인 여운",
         "분위기 및",
         "사운드 및",
         "듣고 싶을 때 듣기 좋아요",
+        "엠비언트",
+        "대기감",
+        "스페이시한 공간감",
+        "깊이감을 더해",
+        "여운을 더해",
+        "겹겹이 쌓이",
     )
     return any(marker in reason for marker in markers)
 
@@ -439,6 +446,30 @@ def _uses_unselected_family_energy_feature(
     return any(marker in first_sentence for marker in ("에너지", "경쾌", "활기찬"))
 
 
+def _uses_unsupported_dream_sound_feature(reason: str, track: TrackSummary, input_text: str) -> bool:
+    """Keep first-sentence genre claims tied to this track's supplied tags."""
+    if not _is_dream_pop_synth_request(input_text):
+        return False
+    tags = {str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}
+    first_sentence = _first_sentence_signature(reason)
+    required_tags = {
+        "앰비언트": {"ambient"},
+        "엠비언트": {"ambient"},
+        "일렉트로닉": {"electronic"},
+        "신스": {"synth", "synth-pop"},
+        "신스팝": {"synth-pop"},
+        "드림 팝": {"dream-pop"},
+        "슈게이즈": {"shoegaze"},
+    }
+    if any(label in first_sentence and not tags.intersection(required) for label, required in required_tags.items()):
+        return True
+    if "공간감" in first_sentence and "spacious" not in tags:
+        return True
+    if "몰입감" in first_sentence and "immersive" not in tags:
+        return True
+    return False
+
+
 def _is_feature_role_compatible(track: TrackSummary, mood: str, input_text: str, index: int) -> bool:
     """Reject a reason whose role contradicts verified track facts."""
     role = _recommendation_role(mood, index, input_text, reason_facts=track.reason_facts)
@@ -472,7 +503,10 @@ def _is_safe_recommendation_message(
         return False
     if _is_dream_pop_synth_request(input_text) and any(
         marker in message
-        for marker in ("공부", "작업", "해야 할 일", "집중이 느슨", "공부 흐름", "작업 흐름", "업무", "페이스 유지")
+        for marker in (
+            "공부", "작업", "해야 할 일", "집중이 느슨", "공부 흐름", "작업 흐름", "업무", "페이스 유지",
+            "몰입할 수 있도록", "깊이 빠져들", "빠져들게", "채워드릴", "들려드릴", "선사할",
+        )
     ):
         return False
     disallowed_markers = (
@@ -574,6 +608,7 @@ def _apply_recommendation_copy(
                 or _repeats_family_trip_reason_logic(reason, input_text)
                 or _leaks_dawn_sentimental_context(reason, input_text)
                 or _uses_unselected_family_energy_feature(reason, track, index, input_text, mood)
+                or _uses_unsupported_dream_sound_feature(reason, track, input_text)
                 or _mentions_unsupported_music_detail(reason, track)
                 or not _is_feature_role_compatible(track, mood, input_text, index)
                 or not _has_verified_grounding(item, track)

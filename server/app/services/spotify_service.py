@@ -706,7 +706,7 @@ FALLBACK_LIBRARY: list[dict[str, object]] = [
     {"name": "When The Sun Hits", "artist_name": "Slowdive", "moods": ["sad", "dreamy", "calm"], "tags": ["shoegaze", "dream-pop", "dreamy"], "reason": "슈게이즈 특유의 물결 같은 질감이 몽환적인 분위기를 잘 만들어줘요."},
     {"name": "Space Song", "artist_name": "Beach House", "moods": ["calm", "dreamy", "sad"], "tags": ["dream-pop", "dreamy", "atmospheric", "spacious", "immersive"]},
     {"name": "Myth", "artist_name": "Beach House", "moods": ["calm", "dreamy", "emotional"], "tags": ["dream-pop", "dreamy", "atmospheric", "immersive"]},
-    {"name": "Heaven or Las Vegas", "artist_name": "Cocteau Twins", "moods": ["dreamy", "excited", "calm"], "tags": ["dream-pop", "shoegaze", "dreamy", "atmospheric", "spacious"]},
+    {"name": "Heaven or Las Vegas", "artist_name": "Cocteau Twins", "moods": ["dreamy", "excited", "calm"], "tags": ["dream-pop", "dreamy", "atmospheric", "spacious"]},
     {"name": "Midnight City", "artist_name": "M83", "moods": ["dreamy", "excited", "calm"], "tags": ["synth-pop", "electronic", "synth", "atmospheric", "spacious", "immersive"]},
     {"name": "Oblivion", "artist_name": "Grimes", "moods": ["dreamy", "excited", "emotional"], "tags": ["synth-pop", "electronic", "synth", "dreamy", "immersive"]},
     {"name": "Rhubarb", "artist_name": "Aphex Twin", "moods": ["calm", "lonely"], "tags": ["ambient", "electronic", "instrumental"], "reason": "차분한 전자음의 결이 앰비언트 요청에 잘 맞아요."},
