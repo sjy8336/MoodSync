@@ -177,6 +177,9 @@ def _has_unnatural_korean_fragment(reason: str) -> bool:
         "시간 만들기 좋",
         "머물기 적절",
         "쉬어가기 어울",
+        "분위기이",
+        "느낌이이",
+        "곡이이",
     )
     return any(fragment in reason for fragment in fragments)
 
@@ -214,6 +217,10 @@ def _uses_unnatural_recommendation_language(reason: str) -> bool:
         "연주곡 · 재즈",
         "재즈 계열의 리듬, 연주곡",
         "감정적이지만",
+        "감정적인 분위기",
+        "분위기 및",
+        "사운드 및",
+        "듣고 싶을 때 듣기 좋아요",
     )
     return any(marker in reason for marker in markers)
 

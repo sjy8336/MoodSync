@@ -1017,11 +1017,23 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
         "punk_side_count": sum(bool((track.reason_facts or {}).get("punk_fit")) and not bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
         "pop_punk_bridge_count": sum(bool((track.reason_facts or {}).get("pop_punk_bridge")) for track in tracks),
         "dream_pop_count": sum(bool((track.reason_facts or {}).get("dream_pop_fit")) for track in tracks),
+        "ambient_electronic_count": sum(
+            bool({"ambient", "electronic"}.intersection({str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}))
+            for track in tracks
+        ),
         "dream_pop_adjacent_count": sum(
             bool((track.reason_facts or {}).get("atmospheric_fit")) and not bool((track.reason_facts or {}).get("dream_pop_fit"))
             for track in tracks
         ),
         "synth_confirmed_count": sum(bool((track.reason_facts or {}).get("synth_fit")) for track in tracks),
+        "synth_related_count": sum(
+            bool({"synth", "synth-pop"}.intersection({str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}))
+            for track in tracks
+        ),
+        "shoegaze_count": sum(
+            "shoegaze" in {str(tag).lower() for tag in (track.reason_facts or {}).get("tags", []) if tag}
+            for track in tracks
+        ),
         "atmospheric_count": sum(bool((track.reason_facts or {}).get("atmospheric_fit")) for track in tracks),
         "spatial_fit_count": sum(bool((track.reason_facts or {}).get("spatial_fit")) for track in tracks),
         "immersive_fit_count": sum(bool((track.reason_facts or {}).get("immersive_fit")) for track in tracks),
@@ -1691,7 +1703,7 @@ def _role_listening_sentence(recommendation_role: dict[str, str] | None, index: 
         "신스 중심 분위기 이어가기": "신스가 어우러진 사운드에 자연스럽게 몰입하고 싶은 순간에 듣기 좋아요.",
         "공간감 있는 사운드에 머물기": "소리가 넓게 퍼지는 듯한 분위기에 귀를 두고 싶을 때 잘 어울려요.",
         "잔잔함에서 한 걸음 벗어나기": "조용하기만 한 곡보다 조금 더 밀도 있는 사운드를 찾을 때 잘 맞아요.",
-        "감성적인 흐름 이어가기": "몽환적이면서 감성적인 흐름을 이어 듣고 싶을 때 듣기 좋아요.",
+        "감성적인 흐름 이어가기": "몽환적이면서 감성적인 흐름을 이어 듣는 시간에 잘 맞아요.",
         "몰입감 있는 구간 만들기": "주변과 잠시 거리를 두고 사운드에 집중하고 싶은 순간에 잘 맞아요.",
         "새벽 분위기에 천천히 잠기기": "새벽 특유의 고요한 분위기에 천천히 잠기고 싶을 때 잘 맞아요.",
         "혼자 생각에 머물기": "혼자 생각이 길어지는 순간에 듣기 좋아요.",
