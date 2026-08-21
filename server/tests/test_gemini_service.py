@@ -156,6 +156,48 @@ class GeminiRecommendationCopyTests(unittest.TestCase):
         self.assertTrue(all("피아노와 색소폰" not in reason for reason in reasons))
         self.assertTrue(all(track.reason_facts.get("jazz_ranking_factors") for track in tracks))
 
+    def test_verified_jazz_recordings_use_distinct_style_descriptions(self) -> None:
+        text = "오늘은 조금 지쳐서 재즈를 듣고 싶어요. 피아노와 색소폰이 있는 곡이면 좋겠어요."
+        shared_facts = {
+            "tags": ["jazz", "instrumental", "standard", "modal", "piano", "saxophone"],
+            "instrumentation_verification": "recording_metadata",
+            "recording_instruments": ["piano", "saxophone"],
+        }
+        so_what = TrackSummary(
+            track_id="spotify-so-what",
+            name="So What",
+            artist_name="Miles Davis",
+            reason_facts={**shared_facts, "tags": [*shared_facts["tags"], "groove", "rhythmic_light"]},
+        )
+        blue_in_green = TrackSummary(
+            track_id="spotify-blue-in-green",
+            name="Blue in Green",
+            artist_name="Miles Davis",
+            reason_facts=shared_facts,
+        )
+
+        so_what_reason = build_track_reason(so_what, "tired", text, 0, _recommendation_role("tired", 0, text, reason_facts=so_what.reason_facts))
+        blue_in_green_reason = build_track_reason(blue_in_green, "tired", text, 1, _recommendation_role("tired", 1, text, reason_facts=blue_in_green.reason_facts))
+
+        self.assertIn("모달 재즈", so_what_reason)
+        self.assertIn("재즈 스탠더드", blue_in_green_reason)
+        self.assertNotEqual(so_what_reason.split(". ")[0], blue_in_green_reason.split(". ")[0])
+
+    def test_selection_debug_marks_verified_spotify_recording_identity(self) -> None:
+        track = TrackSummary(
+            track_id="spotify-round-midnight",
+            name="Round Midnight",
+            artist_name="Thelonious Monk",
+            album_name="Genius of Modern Music, Vol. 1",
+            spotify_track_name="Round Midnight",
+            canonical_recording_identity="Round Midnight — Thelonious Monk — Genius of Modern Music, Vol. 1",
+            recording_match_confidence=0.8,
+        )
+
+        debug = build_selection_debug("재즈와 피아노, 색소폰 연주를 듣고 싶어요.", [track])
+
+        self.assertTrue(debug["selected_tracks"][0]["recording_identity_verified"])
+
     def test_jazz_rhythm_intensity_is_separate_from_low_stimulation(self) -> None:
         text = (
             "오늘은 조금 지쳐서 재즈를 듣고 싶어요. 너무 자극적이지 않고, "

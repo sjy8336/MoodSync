@@ -657,7 +657,13 @@ def _calm_jazz_reason_ingredient(facts: object, role: dict[str, str]) -> dict[st
     tags = {str(tag).strip().lower() for tag in facts.get("tags", []) if str(tag).strip()}
     instruments = {str(item).strip().lower() for item in facts.get("recording_instruments", []) if str(item).strip()}
     recording_verified = facts.get("instrumentation_verification") == "recording_metadata"
-    if recording_verified and "jazz" in tags and {"piano", "saxophone"}.issubset(instruments):
+    if recording_verified and "jazz" in tags and {"piano", "saxophone"}.issubset(instruments) and "bossa-nova" in tags:
+        feature, source = "피아노와 색소폰이 함께하는 보사노바 계열의 재즈 연주", "verified_piano_sax_bossa_nova"
+    elif recording_verified and "jazz" in tags and {"piano", "saxophone"}.issubset(instruments) and "modal" in tags and ("groove" in tags or "rhythmic_light" in tags):
+        feature, source = "피아노와 색소폰이 어우러진 모달 재즈 연주", "verified_piano_sax_modal_jazz"
+    elif recording_verified and "jazz" in tags and {"piano", "saxophone"}.issubset(instruments) and "standard" in tags:
+        feature, source = "피아노와 색소폰이 함께하는 재즈 스탠더드 연주", "verified_piano_sax_jazz_standard"
+    elif recording_verified and "jazz" in tags and {"piano", "saxophone"}.issubset(instruments):
         feature, source = "피아노와 색소폰이 함께하는 재즈 연주", "verified_piano_sax_jazz"
     elif "bossa-nova" in tags:
         feature, source = "보사노바 계열의 가벼운 리듬이 있는 재즈 연주", "bossa_nova_light_rhythm"

@@ -954,6 +954,12 @@ def build_selection_debug(context_text: str | None, tracks: list[TrackSummary]) 
             "spotify_track_id": track.track_id if not track.track_id.startswith("fallback-") else None,
             "canonical_recording_identity": track.canonical_recording_identity or facts.get("canonical_recording_identity"),
             "recording_match_confidence": track.recording_match_confidence,
+            "recording_identity_verified": bool(
+                not track.track_id.startswith("fallback-")
+                and (track.canonical_recording_identity or facts.get("canonical_recording_identity"))
+                and track.recording_match_confidence is not None
+                and track.recording_match_confidence >= 0.7
+            ),
             "actual_instruments": facts.get("recording_instruments") or [],
             "piano": "piano" in set(facts.get("recording_instruments") or []),
             "saxophone": "saxophone" in set(facts.get("recording_instruments") or []),
@@ -1955,8 +1961,12 @@ def _jazz_instrument_feature_sentence(track_facts: dict[str, object], index: int
         return _jazz_catalog_feature_sentence(tags, index)
     instruments = set(str(item).lower() for item in track_facts.get("recording_instruments", []) if item)
     if {"piano", "saxophone"}.issubset(instruments) and "jazz" in tags:
-        if "low_stimulation" in tags or "relaxed" in tags:
-            return "피아노와 색소폰이 함께하는 차분한 재즈 연주곡이에요."
+        if "bossa-nova" in tags:
+            return "피아노와 색소폰이 함께하는 보사노바 계열의 재즈 연주곡이에요."
+        if "modal" in tags and ("groove" in tags or "rhythmic_light" in tags):
+            return "피아노와 색소폰이 어우러진 모달 재즈 연주곡이에요."
+        if "standard" in tags:
+            return "피아노와 색소폰이 함께하는 재즈 스탠더드 연주곡이에요."
         return "피아노와 색소폰이 함께하는 재즈 연주곡이에요."
     if "saxophone" in instruments and "jazz" in tags:
         return "색소폰이 중심이 되는 재즈 연주곡이에요."
